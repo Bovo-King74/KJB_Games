@@ -38,7 +38,7 @@ async function gen(R,mode,desc){
   return m==='impostor'?{mode:m,q:x[0],qi:x[1]}:{mode:m,q:x,qi:''};
 }
 function view(R,id){
-  const v={code:R.code,phase:R.phase,mode:R.mode,round:R.round,ai:!!KEY,
+  const v={code:R.code,phase:R.phase,mode:R.mode,round:R.round,ai:!!KEY,theme:R.theme||'',
     players:P(R).map(p=>({id:p.id,name:p.name,score:p.score,online:p.online,ph:p.pv,in:R.part.includes(p.id),answered:p.id in R.answers,voted:p.id in R.votes}))};
   if(id!=='host'){const me=R.players[id];v.me=me?{id:me.id,name:me.name,score:me.score,in:R.part.includes(id)}:null;
     if(R.phase==='answering'&&me&&v.me.in){v.question=R.imp===id?R.qi:R.q;v.answered=id in R.answers;}
@@ -53,7 +53,7 @@ const broadcast=R=>R.clients.forEach((res,id)=>push(R,id,res));
 async function start(R,theme,mode){
   const part=P(R).filter(p=>p.online).map(p=>p.id);
   if(part.length<3||R.phase==='loading')return;
-  if(typeof theme==='string')R.theme=theme.slice(0,120);
+  if(typeof theme==='string')R.theme=theme.slice(0,500);
   R.phase='loading';R.round++;R.part=part;broadcast(R);
   const r=await gen(R,MODES.includes(mode)||mode==='auto'?mode:'impostor',R.theme);
   Object.assign(R,{mode:r.mode,q:r.q,qi:r.qi,imp:r.mode==='impostor'?pick(part):null,answers:{},votes:{},order:[],result:null,phase:r.mode==='likely'?'voting':'answering'});broadcast(R);

@@ -1,70 +1,373 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Fuori Tema</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Figtree:wght@600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/style.css"></head>
-<body><div class="wrap" id="app"></div><script src="/app.js"></script><script>
-const A=$('#app');let S={},photo=null,key='',es=null;
-try{S=JSON.parse(localStorage.getItem('ft')||'{}');}catch(e){}
-const save=()=>{try{localStorage.setItem('ft',JSON.stringify(S));}catch(e){}};
-if(!S.id){S.id=Math.random().toString(36).slice(2,10);save();}
-const urlRoom=(new URLSearchParams(location.search).get('r')||'').toUpperCase();
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Zughi del KJB · Party Game Multiplayer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;800;900&family=Figtree:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="wrap" id="app"></div>
 
-function home(){
-  A.innerHTML='<div style="height:4vh"></div><h1 class="pop">Fuori<br>Tema</h1><p style="font-size:20px;margin:0">Tutti rispondono alla stessa domanda. Tutti tranne uno. Scoprilo prima che ti freghi.</p>'+
-  '<div class="card"><div class="steps"><div><b>1</b>Rispondi alla tua domanda dal telefono</div><div><b>2</b>Leggete le risposte e discutete a voce</div><div><b>3</b>Votate chi è fuori tema</div></div></div>'+
-  '<button class="btn" id="j">Entra in una partita</button><a class="btn ghost" href="/host">Crea una partita</a>';
-  $('#j').onclick=join;
-}
-function join(){
-  photo=null;
-  A.innerHTML='<h2>Entra in partita</h2><div class="card"><label class="sel" for="f"><span id="pv"></span><b>Scatta un selfie</b><small>È la tua foto per tutta la partita</small></label><input id="f" type="file" accept="image/*" capture="user" hidden>'+
-  '<small>Codice partita (lo vedi sullo schermo)</small><input class="txt code" id="c" maxlength="4" placeholder="ABCD" autocomplete="off" autocapitalize="characters" value="'+esc(urlRoom||S.room||'')+'"><small>Il tuo nome</small><input class="txt" id="n" maxlength="14" placeholder="Come ti chiami?" autocomplete="off" value="'+esc(S.name||'')+'"><div class="err" id="e"></div></div><button class="btn" id="go">Entra</button><button class="btn ghost" id="b">Indietro</button>';
-  const pv=()=>{$('#pv').innerHTML=photo?'<img class="av" style="--s:120px;object-fit:cover" src="'+photo+'">':'<span class="av" style="--s:120px;--c:#ffd93b;font-size:48px">📷</span>';};pv();
-  $('#f').onchange=async e=>{if(e.target.files[0]){photo=await shrink(e.target.files[0]);pv();}};
-  $('#b').onclick=home;
-  $('#go').onclick=async()=>{const room=$('#c').value.trim().toUpperCase(),name=$('#n').value.trim();
-    if(room.length!==4)return $('#e').textContent='Il codice ha 4 lettere.';
-    if(!name)return $('#e').textContent='Scrivi il tuo nome.';
-    $('#go').disabled=true;ROOM=room;
-    const r=await api({type:'join',id:S.id,name,photo});
-    if(r.error){$('#e').textContent=r.error;$('#go').disabled=false;return;}
-    S.room=room;S.name=r.name;save();play();};
-}
-function play(){
-  history.replaceState(null,'','/');key='';
-  if(es)es.close();es=live('id='+S.id);es.onmessage=e=>draw(JSON.parse(e.data));es.onerror=()=>{if(es.readyState===2){S.room='';save();location.reload();}};
-}
-function draw(v){
-  const me=v.me;
-  if(!me){S.room='';save();return join();}
-  const k=[v.phase,v.round,v.answered,v.voted,me.in,v.phase==='lobby'?v.players.map(p=>p.id+p.ph+p.online).join():me.score].join('|');
-  if(k===key)return;key=k;
-  let s='<div class="bar">'+av(me,46)+'<div style="text-align:left"><b>'+esc(me.name)+'</b><br><small>'+me.score+' punti</small></div><div><small>Partita</small><br><b class="disp">'+v.code+'</b></div></div>';
-  const msg=(t,sub)=>'<div class="card pop"><h2>'+t+'</h2>'+(sub?'<span>'+sub+'</span>':'')+'</div>';
-  const m=v.mode,inR=v.players.filter(p=>p.in);
-  if(v.phase==='lobby')s+=msg('Sei dentro! 🎉','Aspetta che chi ospita faccia partire il round.')+tiles(v.players);
-  else if(v.phase==='loading')s+=msg('L\'IA sta preparando il round…');
-  else if(!me.in&&v.phase!=='reveal')s+=msg('Round in corso','Entri nel prossimo, tranquillo.');
-  else if(v.phase==='answering'){
-    s+=v.answered?msg('Risposta inviata ✓','Aspettiamo gli altri ('+inR.filter(p=>p.answered).length+'/'+inR.length+').')+tiles(inR,'answered')
-     :'<div class="card dark pop"><small>La tua domanda</small><div class="q">'+esc(v.question)+'</div></div><input class="txt" id="a" maxlength="80" autocomplete="off" placeholder="'+(m==='best'?'Sii creativo!':'Rispondi in 1-3 parole')+'"><button class="btn" id="s">Invia risposta</button>';
-  }else if(v.phase==='discussion')s+='<h2>'+(m==='impostor'?'Chi ha risposto in modo strano?':'Ecco le risposte')+'</h2>'+qcard(v)+answers(v)+'<div class="card dark"><span>'+(m==='impostor'?'Parlatene a voce: tra poco si vota.':'Leggetele, poi si vota.')+'</span></div>';
-  else if(v.phase==='voting'){
-    s+='<h2>'+(m==='impostor'?'Chi è l\'impostore?':m==='best'?'Qual è la migliore?':'Chi è il più probabile?')+'</h2>'+qcard(v)+(m==='likely'?'':answers(v))+
-     (v.voted?msg('Voto inviato ✓','Aspettiamo gli altri ('+inR.filter(p=>p.voted).length+'/'+inR.length+').')
-     :'<div class="list">'+inR.filter(p=>p.id!==me.id).map(p=>'<button class="btn ghost vote" data-v="'+p.id+'">'+av(p,52)+esc(p.name)+'</button>').join('')+'</div>');
-  }else if(v.phase==='reveal'){
-    const r=v.result,mine=r.impId===me.id,g=r.gain[me.id]||0;
-    s+=(m==='impostor'?'<div class="stamp">'+(r.caught?'BECCATO!':'L\'HA SFANGATA!')+'</div><div class="card pop"><h2>'+(mine?'Eri tu l\'impostore!':'L\'impostore era '+esc(r.impostor))+'</h2><span>Tutti: «'+esc(r.q)+'»</span><span>Impostore: «'+esc(r.qi)+'»</span></div>'
-      :'<div class="card pop"><small>'+(m==='best'?'Vince':'Il più votato')+'</small><h2>'+esc(r.winner||'nessuno')+'</h2></div>')+
-      (m==='likely'?'':'<div class="card pop"><h2>+'+g+' punti</h2></div>')+'<h3>Classifica</h3>'+tiles([...v.players].sort((a,b)=>b.score-a.score));
-  }
-  A.innerHTML=s;
-  const sb=$('#s');if(sb){const go=()=>{const t=$('#a').value;if(t.trim())api({type:'answer',id:S.id,text:t});};sb.onclick=go;$('#a').onkeydown=e=>e.key==='Enter'&&go();}
-  document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>api({type:'vote',id:S.id,target:b.dataset.v}));
-}
-(async()=>{
-  if(S.room&&!urlRoom){ROOM=S.room;const r=await api({type:'join',id:S.id,name:S.name});if(r.ok)return play();S.room='';save();}
-  urlRoom?join():home();
-})();
-</script></body></html>
+  <script src="/app.js"></script>
+  <script>
+    const A = $('#app');
+    let S = {}, photo = null, key = '', es = null, activeTab = 'join';
+    try { S = JSON.parse(localStorage.getItem('ft') || '{}'); } catch(e) {}
+    const save = () => { try { localStorage.setItem('ft', JSON.stringify(S)); } catch(e) {} };
+    if (!S.id) { S.id = Math.random().toString(36).slice(2, 10); save(); }
+    const urlRoom = (new URLSearchParams(location.search).get('r') || '').toUpperCase();
+
+    function renderHeader(extraRight = '') {
+      return `
+        <header class="brand-header">
+          <a class="brand-badge" href="/">
+            ${kjbCrestSvg(46)}
+            <div class="brand-title-wrap">
+              <span class="brand-title">Zughi del KJB</span>
+              <span class="brand-subtitle">Party Arcade • 18+</span>
+            </div>
+          </a>
+          <div>${extraRight}</div>
+        </header>
+      `;
+    }
+
+    function home() {
+      A.innerHTML = `
+        ${renderHeader('<a class="btn secondary" style="padding:8px 14px;font-size:14px;width:auto" href="/host">📺 Schermo Host</a>')}
+
+        <div class="tabs-bar">
+          <button class="tab-btn ${activeTab === 'join' ? 'active' : ''}" id="tab-join">⚡ Entra in Gioco</button>
+          <button class="tab-btn ${activeTab === 'games' ? 'active' : ''}" id="tab-games">🎮 Minigiochi (${MINIGAMES.length})</button>
+        </div>
+
+        <div id="tab-content"></div>
+      `;
+
+      $('#tab-join').onclick = () => { activeTab = 'join'; home(); };
+      $('#tab-games').onclick = () => { activeTab = 'games'; home(); };
+
+      if (activeTab === 'join') {
+        renderJoinTab();
+      } else {
+        renderGamesCatalogTab();
+      }
+    }
+
+    function renderJoinTab() {
+      const tc = $('#tab-content');
+      tc.innerHTML = `
+        <div class="card elevated" style="gap:20px">
+          <div>
+            <h3>Entra nella Stanza</h3>
+            <p class="subtext">Inquadra il QR dello schermo o digita il codice a 4 lettere.</p>
+          </div>
+
+          <label class="selfie-slot" for="f">
+            <span class="selfie-avatar-ring" id="pv">
+              ${photo ? `<img src="${photo}" alt="Selfie">` : '📷'}
+            </span>
+            <div>
+              <b style="color:var(--text-main);font-size:15px">${photo ? 'Cambia il tuo selfie' : 'Scatta un selfie da gara'}</b>
+              <br><small style="color:var(--text-muted)">È la tua foto per votazioni e classifica</small>
+            </div>
+          </label>
+          <input id="f" type="file" accept="image/*" capture="user" hidden>
+
+          <div class="code-input-wrap">
+            <small style="font-weight:700;color:var(--gold)">CODICE STANZA</small>
+            <input class="txt code" id="c" maxlength="4" placeholder="ABCD" autocomplete="off" autocapitalize="characters" value="${esc(urlRoom || S.room || '')}">
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <small style="font-weight:700;color:var(--text-muted)">IL TUO NOME O NICKNAME</small>
+            <input class="txt" id="n" maxlength="14" placeholder="Es. Bomber99" autocomplete="off" value="${esc(S.name || '')}">
+          </div>
+
+          <div class="err" id="e"></div>
+
+          <button class="btn" id="go">
+            <span>⚽ Entra nel Match</span>
+          </button>
+        </div>
+
+        <div class="card" style="background:rgba(255,255,255,0.02);border-style:dashed">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:28px">📺</span>
+            <div>
+              <b style="font-size:15px">Stai ospitando la serata su TV o computer?</b>
+              <p style="font-size:13px;color:var(--text-muted);margin-top:2px">Apri la schermata Host per proiettare il tabellone con QR code e controllo IA.</p>
+            </div>
+          </div>
+          <a class="btn secondary" href="/host" style="margin-top:4px">Apri Console Host</a>
+        </div>
+      `;
+
+      $('#f').onchange = async e => {
+        if (e.target.files[0]) {
+          photo = await shrink(e.target.files[0]);
+          const pv = $('#pv');
+          if (pv) pv.innerHTML = photo ? `<img src="${photo}" alt="Selfie">` : '📷';
+        }
+      };
+
+      $('#go').onclick = async () => {
+        const room = $('#c').value.trim().toUpperCase();
+        const name = $('#n').value.trim();
+        if (room.length !== 4) return $('#e').textContent = 'Il codice deve avere esattamente 4 lettere.';
+        if (!name) return $('#e').textContent = 'Inserisci il tuo nome per giocare.';
+        
+        $('#go').disabled = true;
+        $('#go').textContent = 'Connessione in corso...';
+        ROOM = room;
+
+        const r = await api({ type: 'join', id: S.id, name, photo });
+        if (r.error) {
+          $('#e').textContent = r.error;
+          $('#go').disabled = false;
+          $('#go').textContent = '⚽ Entra nel Match';
+          return;
+        }
+
+        S.room = room;
+        S.name = r.name;
+        save();
+        play();
+      };
+    }
+
+    function renderGamesCatalogTab() {
+      const tc = $('#tab-content');
+      tc.innerHTML = `
+        <div style="margin-bottom:8px">
+          <p class="subtext">Sfoglia la collezione dei minigiochi multiplayer per serate tra amici, tutti personalizzabili dall'IA.</p>
+        </div>
+
+        <div class="games-grid">
+          ${MINIGAMES.map(g => `
+            <div class="game-card" style="--card-accent:${g.accent}">
+              <div class="game-card-top">
+                <div class="game-icon-box">${g.icon}</div>
+                <span class="game-status-tag ${g.isLive ? 'live' : 'ai-ready'}">
+                  ${g.isLive ? '● Giocabile Ora' : g.badge || 'AI Ready'}
+                </span>
+              </div>
+              <div class="game-title">${esc(g.title)}</div>
+              <div class="game-desc">${esc(g.desc)}</div>
+              <div style="font-size:12px;color:var(--gold);background:rgba(245,158,11,0.08);padding:6px 10px;border-radius:8px">
+                💡 <b>Regola:</b> ${esc(g.rulesHint)}
+              </div>
+              <div class="game-meta-row">
+                <span class="game-meta-item">👥 ${esc(g.players)}</span>
+                <span class="game-meta-item">⏱️ ${esc(g.duration)}</span>
+                <span class="game-meta-item" style="margin-left:auto;color:var(--text-dim)">${esc(g.category)}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function play() {
+      history.replaceState(null, '', '/');
+      key = '';
+      if (es) es.close();
+      es = live('id=' + S.id);
+      es.onmessage = e => draw(JSON.parse(e.data));
+      es.onerror = () => {
+        if (es.readyState === 2) {
+          S.room = '';
+          save();
+          location.reload();
+        }
+      };
+    }
+
+    function draw(v) {
+      const me = v.me;
+      if (!me) {
+        S.room = '';
+        save();
+        activeTab = 'join';
+        return home();
+      }
+
+      const k = [v.phase, v.round, v.answered, v.voted, me.in, v.phase === 'lobby' ? v.players.map(p => p.id + p.ph + p.online).join() : me.score, v.theme].join('|');
+      if (k === key) return;
+      key = k;
+
+      let s = `
+        <div class="bar">
+          ${av(me, 48)}
+          <div>
+            <b style="font-size:17px;color:var(--text-main)">${esc(me.name)}</b><br>
+            <small style="color:var(--gold);font-weight:700">${me.score} punti</small>
+          </div>
+          <div>
+            <small style="color:var(--text-muted)">Stanza</small><br>
+            <b class="disp" style="font-size:22px;letter-spacing:0.1em;color:var(--gold)">${v.code}</b>
+          </div>
+        </div>
+      `;
+
+      const msg = (t, sub = '') => `
+        <div class="card elevated pop" style="text-align:center;gap:10px">
+          <h2>${t}</h2>
+          ${sub ? `<p class="subtext">${sub}</p>` : ''}
+        </div>
+      `;
+
+      const m = v.mode;
+      const inR = v.players.filter(p => p.in);
+      const activeGame = MINIGAMES.find(g => g.id === m) || MINIGAMES[0];
+
+      if (v.phase === 'lobby') {
+        s += `
+          ${msg('Sei dentro alla rosa! 🎉', 'Attendi che l\'host dia il fischio d\'inizio dallo schermo principale.')}
+          
+          ${v.theme ? `
+            <div class="card" style="border-color:var(--border-gold);background:rgba(245,158,11,0.06)">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="ai-sparkle-icon">✨</span>
+                <b style="color:var(--gold);font-size:14px">TEMA / REGOLA IMPOSTATA DALL'HOST:</b>
+              </div>
+              <div style="font-size:15px;color:var(--text-main);font-weight:600">«${esc(v.theme)}»</div>
+            </div>
+          ` : ''}
+
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <h3>Spogliatoio Giocatori</h3>
+              <span class="status-pill">${v.players.filter(p => p.online).length} Connessi</span>
+            </div>
+            ${tiles(v.players)}
+          </div>
+        `;
+      } else if (v.phase === 'loading') {
+        s += `
+          <div class="card elevated pop" style="text-align:center;padding:36px 20px">
+            <div class="ai-sparkle-icon" style="font-size:42px;margin-bottom:12px">✨</div>
+            <h2>L'IA sta preparando il round…</h2>
+            <p class="subtext">Generazione quesiti e verifica ruoli segreti in corso.</p>
+          </div>
+        `;
+      } else if (!me.in && v.phase !== 'reveal') {
+        s += msg('Round in corso', 'Sei in panchina per questo round, entrerai nel prossimo!');
+      } else if (v.phase === 'answering') {
+        if (v.answered) {
+          s += msg('Risposta inviata ✓', `Aspettiamo gli altri compagni (${inR.filter(p => p.answered).length}/${inR.length})`) + tiles(inR, 'answered');
+        } else {
+          s += `
+            <div class="q-box pop">
+              <small style="color:var(--gold);font-weight:800;letter-spacing:0.06em">LA TUA DOMANDA SEGRETA</small>
+              <div class="q-text">${esc(v.question)}</div>
+            </div>
+            <div class="card elevated" style="gap:14px">
+              <input class="txt" id="a" maxlength="80" autocomplete="off" placeholder="${m === 'best' ? 'Sii creativo e spietato!' : 'Rispondi in 1–3 parole'}">
+              <button class="btn" id="s">Invia Risposta</button>
+            </div>
+          `;
+        }
+      } else if (v.phase === 'discussion') {
+        s += `
+          <h2>${m === 'impostor' ? 'Chi è fuori tema?' : 'Tutte le Risposte'}</h2>
+          ${qcard(v)}
+          ${answers(v)}
+          <div class="card" style="text-align:center;background:rgba(255,255,255,0.03)">
+            <b style="color:var(--gold)">Discutete a voce nella stanza!</b>
+            <p class="subtext">Tra poco l'host aprirà le votazioni.</p>
+          </div>
+        `;
+      } else if (v.phase === 'voting') {
+        s += `
+          <h2>${m === 'impostor' ? 'Vota l\'Impostore' : m === 'best' ? 'Vota la Risposta Migliore' : 'Chi è il più probabile?'}</h2>
+          ${qcard(v)}
+          ${m === 'likely' ? '' : answers(v)}
+          ${v.voted 
+            ? msg('Voto registrato ✓', `Aspettiamo gli altri voti (${inR.filter(p => p.voted).length}/${inR.length})`)
+            : `
+              <div style="margin-top:10px">
+                <small style="font-weight:700;color:var(--text-muted);display:block;margin-bottom:8px">TOCCA UN GIOCATORE PER VOTARE:</small>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  ${inR.filter(p => p.id !== me.id).map(p => `
+                    <button class="btn secondary" style="justify-content:flex-start;padding:12px 18px" data-v="${p.id}">
+                      ${av(p, 42)}
+                      <span style="font-size:18px;margin-left:6px">${esc(p.name)}</span>
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            `
+          }
+        `;
+      } else if (v.phase === 'reveal') {
+        const r = v.result;
+        const mine = r.impId === me.id;
+        const g = r.gain[me.id] || 0;
+
+        s += `
+          ${m === 'impostor' ? `
+            <div class="stamp">${r.caught ? 'BECCATO!' : 'L\'HA SFANGATA!'}</div>
+            <div class="card elevated pop" style="gap:12px">
+              <h2>${mine ? 'Eri tu l\'Impostore!' : `L'Impostore era ${esc(r.impostor)}!`}</h2>
+              <div style="background:rgba(255,255,255,0.04);padding:14px;border-radius:12px;display:flex;flex-direction:column;gap:6px">
+                <span style="color:var(--emerald);font-weight:700">Domanda per tutti: «${esc(r.q)}»</span>
+                <span style="color:var(--rose);font-weight:700">Domanda impostore: «${esc(r.qi)}»</span>
+              </div>
+            </div>
+          ` : `
+            <div class="card elevated pop" style="text-align:center">
+              <small style="color:var(--gold);font-weight:800">${m === 'best' ? 'VINCITORE DEL ROUND' : 'IL PIÙ VOTATO'}</small>
+              <h2 style="font-size:32px;margin:8px 0">${esc(r.winner || 'Nessuno')}</h2>
+            </div>
+          `}
+
+          ${m === 'likely' ? '' : `
+            <div class="card" style="text-align:center;border-color:var(--border-gold);background:rgba(245,158,11,0.08)">
+              <h2 style="color:var(--gold)">+${g} Punti</h2>
+              <small>Guadagnati in questo round</small>
+            </div>
+          `}
+
+          <div class="card">
+            <h3>Classifica Generale</h3>
+            ${tiles([...v.players].sort((a, b) => b.score - a.score))}
+          </div>
+        `;
+      }
+
+      A.innerHTML = s;
+
+      const sb = $('#s');
+      if (sb) {
+        const go = () => {
+          const t = $('#a').value;
+          if (t.trim()) api({ type: 'answer', id: S.id, text: t });
+        };
+        sb.onclick = go;
+        $('#a').onkeydown = e => e.key === 'Enter' && go();
+      }
+
+      document.querySelectorAll('[data-v]').forEach(b => {
+        b.onclick = () => api({ type: 'vote', id: S.id, target: b.dataset.v });
+      });
+    }
+
+    // Startup check
+    (async () => {
+      if (S.room && !urlRoom) {
+        ROOM = S.room;
+        const r = await api({ type: 'join', id: S.id, name: S.name });
+        if (r.ok) return play();
+        S.room = '';
+        save();
+      }
+      home();
+    })();
+  </script>
+</body>
+</html>

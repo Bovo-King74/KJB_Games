@@ -2,4 +2,6 @@ node_modules/
 .DS_Store
 *.zip
 .env
-
+.gemini/
+.claude/
+.impeccable/config.local.json
