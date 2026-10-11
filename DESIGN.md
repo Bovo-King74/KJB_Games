@@ -89,13 +89,19 @@ Zughi del KJB è una piattaforma multiplayer di minigiochi party da browser (sma
 - Stemma SVG araldico personalizzato a scudo per Zughi del KJB.
 
 ## Components
+- **Macro Navigation Bar:** Switcher a due sezioni (Giochi Interni vs Utility & Sfide) per evitare sovraccarico visivo.
 - **Game Card:** Schede minigioco con icona, badge di stato, metadati (giocatori, durata) e nota regole IA.
+- **AI Toggle Switch:** Toggle fluido iOS-style per attivare/disattivare facoltativamente la generazione IA delle domande.
 - **AI Director Module:** Selettore rapido di preset (Fantacalcio, Bar Sport, Scuola, Spicy, ecc.) e textarea dedicata per prompt personalizzato.
+- **Randomizer Card:** Box orizzontale compatto per avvio a sorpresa istantaneo.
+- **Wheel of Fortune:** Ruota canvas interattiva con fisica di decelerazione per sorteggi giocatori, squadre e penitenze.
+- **External Links Archive:** Lista interattiva per piattaforme di terze parti (JeopardyLabs, TimeGuessr) con form per aggiungere nuovi link.
 - **Room PIN Display:** Visualizzazione a caratteri cubitali con alto contrasto per rapido inserimento.
 
 ## Do's and Don'ts
 - **DO:** Mantenere contrasti elevati su sfondi scuri e dare ampio respiro tra le sezioni.
 - **DO:** Usare l'oro `#f59e0b` con parsimonia solo per punti focali e call to action primarie.
+- **DO:** Separare le funzioni interne dai tool esterni tramite macro-navigazione.
 - **DON'T:** Non usare bordi spessi o strisce decorative laterali artificiali sulle card.
 - **DON'T:** Non inserire animazioni infinite a pulsazione senza scopo informativo.
 

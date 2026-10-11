@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Zughi del KJB · Schermo Host & Console</title>
+  <title>Zughi del KJB · Console Host</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;800;900&family=Figtree:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -16,17 +16,44 @@
   <script src="/app.js"></script>
   <script>
     const A = $('#app');
-    let H = {}, theme = '', mode = 'impostor', last = '', activePresetId = 'fanta';
+    let H = {}, theme = '', mode = 'impostor', last = '';
+    let useAi = true;
+    let macroSection = 'games'; // 'games' | 'utilities'
+    let activePresetId = 'fanta';
+    let customAiPrompt = '';
+
+    // Wheel of Fortune State
+    let wheelMode = 'players'; // 'players' | 'challenges' | 'teams'
+    let wheelAngle = 0;
+    let isSpinning = false;
+    let wheelResult = null;
+    let currentPlayers = [];
+
+    // External Links State (stored in localStorage)
+    let externalLinks = [];
+    try {
+      const stored = localStorage.getItem('kjb_external_links');
+      externalLinks = stored ? JSON.parse(stored) : [...DEFAULT_EXTERNAL_LINKS];
+    } catch (e) {
+      externalLinks = [...DEFAULT_EXTERNAL_LINKS];
+    }
+    const saveExternalLinks = () => {
+      try { localStorage.setItem('kjb_external_links', JSON.stringify(externalLinks)); } catch(e) {}
+    };
 
     const HOST_MODES = [
-      { id: 'impostor', name: "L'Impostore", icon: '🕵️', desc: "Tutti una domanda tranne uno. Chi è fuori tema?" },
-      { id: 'best', name: 'Miglior Risposta', icon: '🏆', desc: "Sfida aperta con risposte anonime e voto della migliore." },
-      { id: 'likely', name: 'Chi è più probabile?', icon: '👀', desc: "Votazione diretta tra i compagni di gioco." },
-      { id: 'auto', name: "Scelta dell'IA", icon: '✨', desc: "L'IA decide la modalità più adatta al tema impostato." }
+      { id: 'impostor', name: "L'Impostore", icon: '🕵️', desc: "Tutti una domanda tranne uno. Chi è fuori tema prima che vi freghi?" },
+      { id: 'best', name: 'Miglior Risposta', icon: '🏆', desc: "Sfida aperta alla risposta più assurda o geniale. Votate la migliore!" },
+      { id: 'likely', name: 'Chi è più probabile?', icon: '👀', desc: "Votazione diretta tra i compagni connessi alla partita." }
     ];
 
     const btn = (id, t, c) => `<button class="btn ${c || ''}" id="${id}">${t}</button>`;
-    const act = t => api({ id: 'host', token: H.token, type: t, theme, mode });
+    const act = (t, customMode, customTheme, customAi) => {
+      const m = customMode || mode;
+      const th = customTheme !== undefined ? customTheme : theme;
+      const aiFlag = customAi !== undefined ? customAi : useAi;
+      return api({ id: 'host', token: H.token, type: t, theme: th, mode: m, ai: aiFlag });
+    };
     const bind = ids => ids.forEach(i => { const b = $('#' + i); if (b) b.onclick = () => act(i); });
 
     function drawQR() {
@@ -38,14 +65,14 @@
       if (qrEl) qrEl.innerHTML = q.createSvgTag(5, 2);
     }
 
-    function renderHostHeader(extra = '') {
+    function renderHostHeader() {
       return `
-        <header class="brand-header" style="margin-bottom:12px">
+        <header class="brand-header" style="margin-bottom:16px">
           <div class="brand-badge">
-            ${kjbCrestSvg(56)}
+            ${kjbCrestSvg(54)}
             <div class="brand-title-wrap">
-              <span class="brand-title" style="font-size:28px">Zughi del KJB</span>
-              <span class="brand-subtitle">Console Host • Schermo Condiviso</span>
+              <span class="brand-title" style="font-size:26px">Zughi del KJB</span>
+              <span class="brand-subtitle">Console Host • Dashboard della Serata</span>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:16px">
@@ -53,165 +80,530 @@
               <span class="status-dot"></span>
               Stanza Live: <b style="color:var(--text-main);margin-left:4px">${ROOM}</b>
             </span>
-            ${extra}
           </div>
         </header>
       `;
     }
 
     function lobby(v) {
-      const n = v.players.filter(p => p.online).length;
+      currentPlayers = v.players ? v.players.filter(p => p.online) : [];
+      const n = currentPlayers.length;
 
-      if (last !== 'lobby') {
-        A.innerHTML = `
-          ${renderHostHeader()}
+      A.innerHTML = `
+        ${renderHostHeader()}
 
-          <div class="host-layout">
-            <!-- Left Column: Access PIN & Roster -->
-            <div style="display:flex;flex-direction:column;gap:20px">
-              <div class="room-pin-display">
-                <small style="color:var(--gold);font-weight:800;letter-spacing:0.08em;text-transform:uppercase">INQUADRA O DIGITA IL CODICE</small>
-                <div class="bigcode">${ROOM}</div>
-                <div id="qr"></div>
-                <p style="font-size:14px;color:var(--text-muted);margin-top:6px">
-                  Collegati a <b style="color:var(--text-main)">${esc(location.host)}</b> con il tuo telefono
-                </p>
-              </div>
+        <!-- Macro Navigation Bar: Giochi Interni vs Utility & Sfide -->
+        <nav class="macro-nav">
+          <button class="macro-nav-btn ${macroSection === 'games' ? 'active' : ''}" id="nav-games">
+            <span style="font-size:20px">🎮</span>
+            <span>Giochi Interni del Club</span>
+          </button>
+          <button class="macro-nav-btn ${macroSection === 'utilities' ? 'active' : ''}" id="nav-utilities">
+            <span style="font-size:20px">🎡</span>
+            <span>Utility & Sfide Esterne (Ruota & Web)</span>
+          </button>
+        </nav>
 
-              <div class="card elevated">
-                <div style="display:flex;align-items:center;justify-content:space-between">
-                  <h3>Rosa Giocatori</h3>
-                  <span class="status-pill">${n} Connessi</span>
-                </div>
-                <div id="ch"></div>
-              </div>
+        <div class="host-layout">
+          <!-- Left Column (340px): Stanza Live, PIN, QR Code & Rosa Giocatori -->
+          <div style="display:flex;flex-direction:column;gap:20px">
+            <div class="room-pin-display">
+              <small style="color:var(--gold);font-weight:800;letter-spacing:0.08em;text-transform:uppercase">INQUADRA O DIGITA IL CODICE</small>
+              <div class="bigcode">${ROOM}</div>
+              <div id="qr"></div>
+              <p style="font-size:14px;color:var(--text-muted);margin-top:6px">
+                Collegati a <b style="color:var(--text-main)">${esc(location.host)}</b> con il tuo telefono
+              </p>
             </div>
 
-            <!-- Right Column: Game Selection & AI Director Customizer -->
-            <div style="display:flex;flex-direction:column;gap:22px">
-              <!-- Game Mode Selector -->
-              <div class="card elevated" style="gap:14px">
-                <div class="section-title-row">
-                  <div>
-                    <h3>1. Seleziona il Minigioco</h3>
-                    <p class="subtext">Scegli la modalità per questo round</p>
-                  </div>
-                  <span style="font-size:13px;color:var(--gold);font-weight:700">🎮 Social Gamebox Engine</span>
-                </div>
-
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
-                  ${HOST_MODES.map(m => `
-                    <div class="game-card ${m.id === mode ? 'active-selected' : ''}" data-m="${m.id}" style="cursor:pointer;padding:16px">
-                      <div style="display:flex;align-items:center;gap:10px">
-                        <span style="font-size:24px">${m.icon}</span>
-                        <div>
-                          <div style="font-weight:800;font-family:var(--font-disp);font-size:16px">${esc(m.name)}</div>
-                        </div>
-                      </div>
-                      <div style="font-size:13px;color:var(--text-muted);margin-top:6px;line-height:1.35">${esc(m.desc)}</div>
-                    </div>
-                  `).join('')}
-                </div>
+            <div class="card elevated">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <h3>Rosa Giocatori</h3>
+                <span class="status-pill">${n} Connessi</span>
               </div>
-
-              <!-- AI Director Customizer (Key Feature) -->
-              <div class="ai-director-card">
-                <div class="ai-header-row">
-                  <div class="ai-sparkle-title">
-                    <span class="ai-sparkle-icon">✨</span>
-                    <span>Direttore di Gioco & Regole AI</span>
-                  </div>
-                  <small id="ai-status" style="color:var(--gold);font-weight:700"></small>
-                </div>
-
-                <p class="subtext" style="font-size:14.5px">
-                  Personalizza i contenuti e le regole del round. Scegli un preset rapido o scrivi il tuo prompt personalizzato:
-                </p>
-
-                <!-- Presets Pills -->
-                <div>
-                  <small style="font-weight:800;color:var(--gold);letter-spacing:0.04em;display:block;margin-bottom:8px">PRESET A TEMA VELOCI:</small>
-                  <div class="presets-container">
-                    ${AI_PRESETS.map(p => `
-                      <button class="preset-chip ${p.id === activePresetId ? 'active' : ''}" data-p="${p.id}">
-                        <span>${p.icon}</span>
-                        <span>${esc(p.title)}</span>
-                      </button>
-                    `).join('')}
-                  </div>
-                </div>
-
-                <!-- Custom Rule Textarea -->
-                <div>
-                  <small style="font-weight:800;color:var(--text-muted);display:block;margin-bottom:6px">ISTRUZIONI DETTAGLIATE PER L'IA (TEMA O REGOLE SPECIALI):</small>
-                  <textarea class="ai-textarea" id="th" maxlength="500" placeholder="Scrivi qui il tema personalizzato o regole speciali (es. solo aneddoti dell'estate 2024, penitenze, slang romano...)"></textarea>
-                  <div style="display:flex;justify-content:space-between;margin-top:6px">
-                    <small id="char-count" style="color:var(--text-dim)">0/500 caratteri</small>
-                    <small style="color:var(--emerald);font-weight:600">✓ Prompt trasmesso istantaneamente all'IA</small>
-                  </div>
-                </div>
+              <div id="ch">
+                ${v.players.length ? tiles(v.players, 'online') : '<span style="color:var(--text-dim);font-size:14px">In attesa che i telefoni inquadrino il QR code...</span>'}
               </div>
-
-              <!-- Start Button -->
-              ${btn('start', '', 'btn')}
+              ${n < 3 ? '<small style="color:var(--gold)">⚠️ Servono almeno 3 giocatori per avviare una partita interna.</small>' : ''}
             </div>
           </div>
-        `;
 
-        // Apply default preset if empty
-        if (!theme && AI_PRESETS[0]) {
-          theme = AI_PRESETS[0].prompt;
-        }
+          <!-- Right Column: Main Content based on Macro Section -->
+          <div style="display:flex;flex-direction:column;gap:20px" id="macro-content">
+            ${macroSection === 'games' ? renderGamesSection(n, v) : renderUtilitiesSection(n, v)}
+          </div>
+        </div>
+      `;
 
-        const thInput = $('#th');
-        if (thInput) {
-          thInput.value = theme;
-          $('#char-count').textContent = theme.length + '/500 caratteri';
-          thInput.oninput = e => {
-            theme = e.target.value;
-            $('#char-count').textContent = theme.length + '/500 caratteri';
-          };
-        }
+      drawQR();
 
-        drawQR();
+      // Navigation listeners
+      $('#nav-games').onclick = () => {
+        macroSection = 'games';
+        lobby(v);
+      };
+      $('#nav-utilities').onclick = () => {
+        macroSection = 'utilities';
+        lobby(v);
+        initWheel();
+      };
 
-        // Mode cards binding
-        document.querySelectorAll('[data-m]').forEach(b => {
-          b.onclick = () => {
-            mode = b.dataset.m;
-            document.querySelectorAll('[data-m]').forEach(x => x.classList.toggle('active-selected', x === b));
-          };
-        });
-
-        // Presets binding
-        document.querySelectorAll('[data-p]').forEach(chip => {
-          chip.onclick = () => {
-            activePresetId = chip.dataset.p;
-            document.querySelectorAll('[data-p]').forEach(x => x.classList.toggle('active', x === chip));
-            const found = AI_PRESETS.find(p => p.id === activePresetId);
-            if (found) {
-              theme = found.prompt;
-              if (thInput) {
-                thInput.value = theme;
-                $('#char-count').textContent = theme.length + '/500 caratteri';
-              }
-            }
-          };
-        });
-
-        $('#start').onclick = () => act('start');
+      if (macroSection === 'games') {
+        bindGamesEvents(v);
+      } else {
+        bindUtilitiesEvents(v);
       }
-
-      // Update dynamic elements
-      $('#ch').innerHTML = v.players.length ? tiles(v.players, 'online') : '<span style="color:var(--text-dim);font-size:15px">In attesa che i telefoni inquadrino il QR code...</span>';
-      $('#start').disabled = n < 3;
-      $('#start').innerHTML = n < 3 
-        ? `<span>⏳ Servono almeno 3 giocatori connessi (${n}/3)</span>` 
-        : `<span>🚀 Fischio d'Inizio • Round ${v.round + 1}</span>`;
-
-      $('#ai-status').textContent = v.ai ? '● IA Attiva (Generazione Dinamica)' : '○ Modalità Offline (Domande Preimpostate)';
     }
 
+    // ==========================================
+    // MACRO AREA 1: GIOCHI INTERNI DEL CLUB
+    // ==========================================
+    function renderGamesSection(n, v) {
+      const activeGameObj = HOST_MODES.find(m => m.id === mode) || HOST_MODES[0];
+
+      return `
+        <!-- Opzione 1: Selezione Gioco dal Catalogo -->
+        <div class="card elevated" style="gap:16px">
+          <div class="section-title-row">
+            <div>
+              <h3>1. Avvia un Gioco dal Catalogo</h3>
+              <p class="subtext">Scegli una delle modalità ufficiali del Club</p>
+            </div>
+            <span style="font-size:13px;color:var(--gold);font-weight:700">Partita a Turni</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+            ${HOST_MODES.map(m => `
+              <div class="game-card ${m.id === mode ? 'active-selected' : ''}" data-m="${m.id}" style="padding:16px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:26px">${m.icon}</span>
+                  <div style="font-weight:800;font-family:var(--font-disp);font-size:17px">${esc(m.name)}</div>
+                </div>
+                <div style="font-size:13px;color:var(--text-muted);margin-top:6px;line-height:1.4">${esc(m.desc)}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Toggle Elegante per Uso IA -->
+          <div class="toggle-switch-wrap">
+            <div style="display:flex;flex-direction:column">
+              <b style="color:var(--text-main);font-size:15px">Generazione Domande con IA</b>
+              <small style="color:var(--text-muted);margin-top:2px">
+                ${useAi 
+                  ? '✨ Attiva: L\'IA genera quesiti inediti e li adatta al tema/preset scelto.' 
+                  : '📦 Disattivata: Vengono usate le domande preimpostate del database offline.'}
+              </small>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="ai-toggle" ${useAi ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- Presets veloci (attivi solo se l'IA è abilitata) -->
+          ${useAi ? `
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <small style="font-weight:800;color:var(--gold);letter-spacing:0.04em">PRESET DI ARGOMENTI PER IL GIOCO:</small>
+              <div class="presets-container">
+                ${AI_PRESETS.map(p => `
+                  <button class="preset-chip ${p.id === activePresetId ? 'active' : ''}" data-p="${p.id}">
+                    <span>${p.icon}</span>
+                    <span>${esc(p.title)}</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <button class="btn" id="start-catalog" ${n < 3 ? 'disabled' : ''}>
+            <span>🚀 Avvia ${esc(activeGameObj.name)} ${n < 3 ? `(${n}/3 giocatori)` : ''}</span>
+          </button>
+        </div>
+
+        <!-- Opzione 2: Creazione Gioco con Prompt Diretto all'IA -->
+        <div class="ai-director-card">
+          <div class="ai-header-row">
+            <div class="ai-sparkle-title">
+              <span class="ai-sparkle-icon">✨</span>
+              <span>2. Crea con Prompt Diretto all'IA</span>
+            </div>
+            <span class="status-pill" style="font-size:12px;padding:4px 10px">Modalità Regista IA</span>
+          </div>
+
+          <p class="subtext" style="font-size:14px">
+            Inserisci istruzioni libere per l'IA: inventerà quesiti ad hoc, regole speciali o adatterà la sfida ad aneddoti specifici del vostro gruppo.
+          </p>
+
+          <textarea class="ai-textarea" id="custom-prompt-input" maxlength="500" placeholder="Es: Fai un round impostore basato solo sulla vacanza a Barcellona dell'estate scorsa, oppure crea domande con penitenze per chi sbaglia...">${esc(customAiPrompt)}</textarea>
+          
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <small style="color:var(--text-dim)" id="prompt-count">${customAiPrompt.length}/500 caratteri</small>
+            <button class="btn rose" id="start-custom-ai" style="width:auto;padding:12px 24px" ${n < 3 ? 'disabled' : ''}>
+              <span>✨ Genera & Avvia Gioco IA</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Opzione 3: Randomizer (Scelta Casuale) -->
+        <div class="randomizer-box">
+          <div style="display:flex;align-items:center;gap:16px">
+            <span style="font-size:38px">🎲</span>
+            <div>
+              <h3 style="font-size:19px">3. Scelta Casuale (Randomizer)</h3>
+              <p class="subtext" style="font-size:14px;margin-top:2px">
+                Lascia decidere al fato: estrae una modalità a sorpresa e lancia subito il match.
+              </p>
+            </div>
+          </div>
+          <button class="btn secondary" id="start-randomizer" style="width:auto;min-width:220px;padding:14px 20px" ${n < 3 ? 'disabled' : ''}>
+            <span>🎲 Avvia Gioco a Sorpresa</span>
+          </button>
+        </div>
+      `;
+    }
+
+    function bindGamesEvents(v) {
+      // Game card clicks
+      document.querySelectorAll('[data-m]').forEach(b => {
+        b.onclick = () => {
+          mode = b.dataset.m;
+          lobby(v);
+        };
+      });
+
+      // AI toggle
+      const aiToggle = $('#ai-toggle');
+      if (aiToggle) {
+        aiToggle.onchange = e => {
+          useAi = e.target.checked;
+          lobby(v);
+        };
+      }
+
+      // Presets
+      document.querySelectorAll('[data-p]').forEach(chip => {
+        chip.onclick = () => {
+          activePresetId = chip.dataset.p;
+          const found = AI_PRESETS.find(p => p.id === activePresetId);
+          if (found) theme = found.prompt;
+          lobby(v);
+        };
+      });
+
+      // Start from catalog
+      const btnCatalog = $('#start-catalog');
+      if (btnCatalog) {
+        btnCatalog.onclick = () => {
+          act('start', mode, theme, useAi);
+        };
+      }
+
+      // Custom AI prompt
+      const promptInput = $('#custom-prompt-input');
+      if (promptInput) {
+        promptInput.oninput = e => {
+          customAiPrompt = e.target.value;
+          const cnt = $('#prompt-count');
+          if (cnt) cnt.textContent = customAiPrompt.length + '/500 caratteri';
+        };
+      }
+
+      const btnCustomAi = $('#start-custom-ai');
+      if (btnCustomAi) {
+        btnCustomAi.onclick = () => {
+          const finalPrompt = customAiPrompt.trim() || 'Crea un gioco divertente e creativo a sorpresa tra amici maggiorenni.';
+          act('start', 'auto', finalPrompt, true);
+        };
+      }
+
+      // Randomizer button
+      const btnRandom = $('#start-randomizer');
+      if (btnRandom) {
+        btnRandom.onclick = () => {
+          const randMode = pick(['impostor', 'best', 'likely']);
+          const randPreset = pick(AI_PRESETS);
+          const randAi = Math.random() > 0.2; // 80% chance AI
+          act('start', randMode, randPreset ? randPreset.prompt : '', randAi);
+        };
+      }
+    }
+
+    // ==========================================
+    // MACRO AREA 2: UTILITY E SFIDE ESTERNE
+    // ==========================================
+    function renderUtilitiesSection(n, v) {
+      return `
+        <!-- Componente: Ruota della Fortuna -->
+        <div class="card elevated" style="gap:18px">
+          <div class="section-title-row">
+            <div>
+              <h3>🎡 Ruota della Fortuna KJB</h3>
+              <p class="subtext">Sorteggia giocatori per penitenze, crea squadre casuali o estrai sfide</p>
+            </div>
+            <div class="tabs-bar" style="padding:2px">
+              <button class="tab-btn ${wheelMode === 'players' ? 'active' : ''}" id="wheel-tab-players" style="padding:6px 12px;font-size:13px">👥 Giocatori</button>
+              <button class="tab-btn ${wheelMode === 'teams' ? 'active' : ''}" id="wheel-tab-teams" style="padding:6px 12px;font-size:13px">🏆 Team A/B</button>
+              <button class="tab-btn ${wheelMode === 'challenges' ? 'active' : ''}" id="wheel-tab-challenges" style="padding:6px 12px;font-size:13px">🔥 Penitenze</button>
+            </div>
+          </div>
+
+          <div class="wheel-wrapper">
+            <div class="wheel-frame">
+              <div class="wheel-pointer"></div>
+              <canvas class="wheel-canvas" id="wheel-canvas" width="600" height="600"></canvas>
+              <div class="wheel-center-cap">⚽</div>
+            </div>
+
+            <div style="margin-top:16px;width:100%;max-width:320px">
+              <button class="btn" id="btn-spin-wheel" ${isSpinning ? 'disabled' : ''}>
+                <span>🎡 ${isSpinning ? 'La Ruota sta girando...' : 'Gira la Ruota!'}</span>
+              </button>
+            </div>
+
+            <div class="wheel-result-banner" id="wheel-result-banner">
+              ${wheelResult 
+                ? `<b style="color:var(--gold);font-size:18px">🏆 Estratto: ${esc(wheelResult)}</b>` 
+                : '<span style="color:var(--text-muted);font-size:14px">Premi il pulsante per effettuare il sorteggio live.</span>'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Componente: Archivio Sfide Web & Siti Terzi -->
+        <div class="card elevated" style="gap:18px">
+          <div class="section-title-row">
+            <div>
+              <h3>🌐 Archivio Sfide Esterne</h3>
+              <p class="subtext">Lancia sfide e giochi online su piattaforme terze senza perdere la stanza</p>
+            </div>
+            <span class="status-pill">${externalLinks.length} Siti Salvati</span>
+          </div>
+
+          <!-- Lista Cliccabile dei Link -->
+          <div class="ext-links-list" id="ext-links-container">
+            ${externalLinks.map((item, idx) => `
+              <div class="ext-link-item">
+                <div class="ext-link-info">
+                  <div class="ext-link-icon">${item.icon || '🔗'}</div>
+                  <div class="ext-link-texts">
+                    <span class="ext-link-title">${esc(item.title)}</span>
+                    <span class="ext-link-url">${esc(item.url)}</span>
+                    ${item.desc ? `<small style="color:var(--text-dim);margin-top:2px">${esc(item.desc)}</small>` : ''}
+                  </div>
+                </div>
+                <div class="ext-link-actions">
+                  <a class="btn secondary" href="${esc(item.url)}" target="_blank" rel="noopener noreferrer" style="width:auto;padding:8px 16px;font-size:14px">
+                    <span>Apri Sito ↗</span>
+                  </a>
+                  ${idx >= 2 ? `
+                    <button class="btn ghost" style="width:auto;padding:8px;color:var(--rose)" data-delete-link="${idx}" title="Rimuovi link">
+                      🗑️
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Modulo Aggiunta Nuovo Link -->
+          <div style="background:rgba(0,0,0,0.25);padding:16px;border-radius:var(--radius-sm);border:1px dashed var(--border);display:flex;flex-direction:column;gap:12px">
+            <b style="font-size:14px;color:var(--gold)">+ AGGIUNGI UN NUOVO SITO O SFIDA WEB ALL'ARCHIVIO:</b>
+            <div style="display:grid;grid-template-columns:1fr 1.5fr auto;gap:10px">
+              <input class="txt" id="new-link-title" placeholder="Nome (es. Codenames)" style="padding:10px 14px;font-size:14px">
+              <input class="txt" id="new-link-url" placeholder="Indirizzo (es. https://...)" style="padding:10px 14px;font-size:14px">
+              <button class="btn" id="btn-add-link" style="width:auto;padding:10px 18px;font-size:14px">
+                Aggiungi
+              </button>
+            </div>
+            <div class="err" id="link-err" style="font-size:13px;min-height:auto"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function bindUtilitiesEvents(v) {
+      // Wheel tabs
+      const tabP = $('#wheel-tab-players');
+      const tabT = $('#wheel-tab-teams');
+      const tabC = $('#wheel-tab-challenges');
+      if (tabP) tabP.onclick = () => { wheelMode = 'players'; wheelResult = null; lobby(v); };
+      if (tabT) tabT.onclick = () => { wheelMode = 'teams'; wheelResult = null; lobby(v); };
+      if (tabC) tabC.onclick = () => { wheelMode = 'challenges'; wheelResult = null; lobby(v); };
+
+      // Spin button
+      const spinBtn = $('#btn-spin-wheel');
+      if (spinBtn) {
+        spinBtn.onclick = () => spinWheelAction(v);
+      }
+
+      // Add link button
+      const addLinkBtn = $('#btn-add-link');
+      if (addLinkBtn) {
+        addLinkBtn.onclick = () => {
+          const tInput = $('#new-link-title');
+          const uInput = $('#new-link-url');
+          const errEl = $('#link-err');
+          const title = tInput.value.trim();
+          let url = uInput.value.trim();
+
+          if (!title) { errEl.textContent = 'Inserisci un nome per il sito o sfida.'; return; }
+          if (!url) { errEl.textContent = 'Inserisci l\'URL del sito.'; return; }
+          if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url;
+          }
+
+          externalLinks.push({
+            id: 'custom-' + Date.now(),
+            title,
+            url,
+            icon: '🎲',
+            desc: 'Sfida web personalizzata aggiunta dall\'host.'
+          });
+          saveExternalLinks();
+          lobby(v);
+        };
+      }
+
+      // Delete custom link
+      document.querySelectorAll('[data-delete-link]').forEach(btn => {
+        btn.onclick = () => {
+          const idx = parseInt(btn.dataset.deleteLink, 10);
+          if (!isNaN(idx)) {
+            externalLinks.splice(idx, 1);
+            saveExternalLinks();
+            lobby(v);
+          }
+        };
+      });
+    }
+
+    // ==========================================
+    // WHEEL OF FORTUNE ENGINE (CANVAS)
+    // ==========================================
+    function getWheelItems() {
+      if (wheelMode === 'players') {
+        const names = currentPlayers.map(p => p.name);
+        if (names.length >= 2) return names;
+        return ['Bomber 1', 'Bomber 2', 'Bomber 3', 'Bomber 4'];
+      }
+      if (wheelMode === 'teams') {
+        return ['Team Oro 🟡', 'Team Verde 🟢', 'Team Rosa 🔴', 'Team Blu 🔵'];
+      }
+      return DEFAULT_WHEEL_CHALLENGES;
+    }
+
+    function drawWheelOnCanvas() {
+      const canvas = $('#wheel-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const radius = w / 2 - 12;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const items = getWheelItems();
+      const numSlices = items.length;
+      const sliceAngle = (2 * Math.PI) / numSlices;
+      const sliceColors = ['#f59e0b', '#10b981', '#f43f5e', '#3b82f6', '#8b5cf6', '#06b6d4', '#eab308', '#ec4899'];
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(wheelAngle);
+
+      for (let i = 0; i < numSlices; i++) {
+        const start = i * sliceAngle;
+        const end = start + sliceAngle;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radius, start, end);
+        ctx.closePath();
+        ctx.fillStyle = sliceColors[i % sliceColors.length];
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#090d16';
+        ctx.stroke();
+
+        // Label drawing
+        ctx.save();
+        ctx.rotate(start + sliceAngle / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#0b0f19';
+        ctx.font = 'bold 22px "Bricolage Grotesque", sans-serif';
+
+        let text = items[i];
+        if (text.length > 18) text = text.slice(0, 16) + '…';
+        ctx.fillText(text, radius - 24, 8);
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    function initWheel() {
+      drawWheelOnCanvas();
+    }
+
+    function spinWheelAction(v) {
+      if (isSpinning) return;
+      isSpinning = true;
+      wheelResult = null;
+
+      const spinBtn = $('#btn-spin-wheel');
+      if (spinBtn) spinBtn.disabled = true;
+
+      const items = getWheelItems();
+      const numSlices = items.length;
+      const sliceAngle = (2 * Math.PI) / numSlices;
+
+      // Random revolutions between 5 and 9 + random slice offset
+      const extraRevolutions = (5 + Math.random() * 4) * 2 * Math.PI;
+      const targetRandomOffset = Math.random() * 2 * Math.PI;
+      const totalSpin = extraRevolutions + targetRandomOffset;
+      const startAngle = wheelAngle;
+      const finalAngle = startAngle + totalSpin;
+      const duration = 4000;
+      const startTime = performance.now();
+
+      function animateSpin(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Exponential ease out (deceleration)
+        const easeOut = 1 - Math.pow(1 - progress, 3.5);
+        wheelAngle = startAngle + totalSpin * easeOut;
+
+        drawWheelOnCanvas();
+
+        if (progress < 1) {
+          requestAnimationFrame(animateSpin);
+        } else {
+          isSpinning = false;
+          wheelAngle = finalAngle % (2 * Math.PI);
+
+          // Calculate winning item at top pointer (-PI/2)
+          let normalized = (-Math.PI / 2 - wheelAngle) % (2 * Math.PI);
+          if (normalized < 0) normalized += 2 * Math.PI;
+          const winningIdx = Math.floor(normalized / sliceAngle) % numSlices;
+          wheelResult = items[winningIdx];
+
+          const resBanner = $('#wheel-result-banner');
+          if (resBanner) {
+            resBanner.innerHTML = `<b style="color:var(--gold);font-size:22px" class="pop">🏆 Estratto: ${esc(wheelResult)}!</b>`;
+          }
+
+          if (spinBtn) spinBtn.disabled = false;
+        }
+      }
+
+      requestAnimationFrame(animateSpin);
+    }
+
+    // ==========================================
+    // GAME ROUND FLOW VIEWS
+    // ==========================================
     function draw(v) {
       if (v.phase === 'lobby') {
         lobby(v);

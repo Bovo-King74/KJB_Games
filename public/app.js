@@ -168,6 +168,36 @@ const AI_PRESETS = [
   }
 ];
 
+// External Challenges Links (JeopardyLabs, TimeGuessr, etc.)
+const DEFAULT_EXTERNAL_LINKS = [
+  {
+    id: 'jeopardy',
+    title: 'JeopardyLabs',
+    url: 'https://jeopardylabs.com/',
+    icon: '🏆',
+    desc: 'Crea o gioca tabelloni quiz personalizzati con punti e categorie per sfide a squadre.'
+  },
+  {
+    id: 'timeguessr',
+    title: 'TimeGuessr (Italiano)',
+    url: 'https://timeguessr.com/it',
+    icon: '🌍',
+    desc: 'Indovina l\'anno e la posizione sulla mappa delle fotografie storiche del mondo.'
+  }
+];
+
+// Default Wheel of Fortune Challenges
+const DEFAULT_WHEEL_CHALLENGES = [
+  "🍺 Paga da bere al prossimo giro",
+  "⚽ Fai 10 palleggi (o 10 flessioni)",
+  "🗣️ Racconta una figuraccia recente",
+  "🎤 Canta un ritornello a squarciagola",
+  "📱 Mostra l'ultima foto della galleria",
+  "🎯 Scegli chi deve scontare un pegno",
+  "🤐 Muto per tutto il prossimo round",
+  "🕺 Balla per 15 secondi senza musica"
+];
+
 const av = (p, s = 48) => `
 <span class="av" style="--s:${s}px;--c:${col(p.id)}">
   ${p.ph ? `<img alt="${esc(p.name)}" src="/p/${ROOM}/${p.id}?v=${p.ph}">` : esc((p.name || '?')[0].toUpperCase())}

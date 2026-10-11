@@ -24,8 +24,8 @@ async function ask(prompt){
   const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:AbortSignal.timeout(20000),headers:{'content-type':'application/json','x-api-key':AKEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:MODEL,max_tokens:300,messages:[{role:'user',content:prompt}]})});
   return (await r.json()).content[0].text;
 }
-async function gen(R,mode,desc){
-  if(KEY){try{
+async function gen(R,mode,desc,useAi){
+  if(KEY && useAi !== false){try{
     const prompt='Sei il conduttore di un party game tra amici di 18 anni, in italiano, tono leggero e divertente. '+(desc?'Richiesta del conduttore: "'+desc+'". ':'')+
       (mode==='auto'?'Scegli tu il tipo di gioco più adatto alla richiesta tra impostor, best, likely. ':'Tipo di gioco: '+mode+'. ')+
       'Tipi: "impostor" = tutti ricevono la stessa domanda tranne uno, che ne riceve una diversa ma simile (risposte brevi di 1-3 parole plausibili per entrambe); "best" = tutti ricevono la stessa sfida creativa, rispondono e poi votano la risposta migliore; "likely" = una domanda tipo "Chi è il più probabile a...?" a cui si risponde votando un giocatore. Non ripetere: '+R.used.slice(-10).join(' | ')+'. Rispondi SOLO con JSON: {"mode":"impostor|best|likely","normal":"...","impostor":"... (solo per impostor, altrimenti vuoto)"}';
@@ -38,7 +38,7 @@ async function gen(R,mode,desc){
   return m==='impostor'?{mode:m,q:x[0],qi:x[1]}:{mode:m,q:x,qi:''};
 }
 function view(R,id){
-  const v={code:R.code,phase:R.phase,mode:R.mode,round:R.round,ai:!!KEY,theme:R.theme||'',
+  const v={code:R.code,phase:R.phase,mode:R.mode,round:R.round,ai:!!KEY&&(R.useAi!==false),theme:R.theme||'',
     players:P(R).map(p=>({id:p.id,name:p.name,score:p.score,online:p.online,ph:p.pv,in:R.part.includes(p.id),answered:p.id in R.answers,voted:p.id in R.votes}))};
   if(id!=='host'){const me=R.players[id];v.me=me?{id:me.id,name:me.name,score:me.score,in:R.part.includes(id)}:null;
     if(R.phase==='answering'&&me&&v.me.in){v.question=R.imp===id?R.qi:R.q;v.answered=id in R.answers;}
@@ -50,12 +50,13 @@ function view(R,id){
 }
 const push=(R,id,res)=>res.write('data: '+JSON.stringify(view(R,id))+'\n\n');
 const broadcast=R=>R.clients.forEach((res,id)=>push(R,id,res));
-async function start(R,theme,mode){
+async function start(R,theme,mode,useAi){
   const part=P(R).filter(p=>p.online).map(p=>p.id);
   if(part.length<3||R.phase==='loading')return;
   if(typeof theme==='string')R.theme=theme.slice(0,500);
+  if(typeof useAi==='boolean')R.useAi=useAi;
   R.phase='loading';R.round++;R.part=part;broadcast(R);
-  const r=await gen(R,MODES.includes(mode)||mode==='auto'?mode:'impostor',R.theme);
+  const r=await gen(R,MODES.includes(mode)||mode==='auto'?mode:'impostor',R.theme,R.useAi);
   Object.assign(R,{mode:r.mode,q:r.q,qi:r.qi,imp:r.mode==='impostor'?pick(part):null,answers:{},votes:{},order:[],result:null,phase:r.mode==='likely'?'voting':'answering'});broadcast(R);
 }
 const discuss=R=>{R.order=R.part.filter(i=>i in R.answers).sort(()=>Math.random()-.5);R.phase='discussion';};
@@ -88,7 +89,7 @@ async function act(b){
     broadcast(R);return{ok:true,name:p.name};
   }
   if(host){
-    if(t==='start'||t==='next'){start(R,b.theme,b.mode);return{};}
+    if(t==='start'||t==='next'){start(R,b.theme,b.mode,b.ai);return{};}
     if(t==='discuss'&&R.phase==='answering')discuss(R);
     if(t==='tovote'&&R.phase==='discussion')R.phase='voting';
     if(t==='reveal'&&R.phase==='voting')reveal(R);

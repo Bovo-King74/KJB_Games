@@ -19,17 +19,18 @@ Ispirato concettualmente alla piattaforma **socialgamebox.app**, unisce una ricc
 
 ---
 
-## ✨ Funzionalità Chiave: Direttore di Gioco & Regole AI
+## 👑 Console Host: Giochi Interni & Utility Esterne
 
-L'host può personalizzare i contenuti e le regole del round al volo:
-1. **Preset Rapidi (1-clic):**
-   - ⚽ *Asta & Fantacalcio* (Serie A, rigori sbagliati, malus, aste alle 4 di notte)
-   - 🍺 *Bar Sport & Ignoranza* (Figuracce del sabato sera, scuse da calcetto, aneddoti)
-   - 🎓 *Scuola & Esami Rewind* (Professori mitici, interrogazioni a sorpresa, sessione esami)
-   - 🔥 *Spicy & Senza Filtri* (Confessioni, verità imbarazzanti, segreti)
-   - 🎬 *Serie TV & Pop Culture* (Meme, battute cult, tormentoni)
-   - 🎲 *Caos Totale* (Regole pazze inventate dall'IA a ogni round)
-2. **Prompt Personalizzato:** L'host può digitare fino a 500 caratteri di istruzioni specifiche (es. *«penitenza se perdi: paga da bere»*, *«tutte le risposte in rima»*, o aneddoti specifici del gruppo).
+La schermata dell'host (`/host`) include due macro-aree operative dedicate:
+
+### 1. 🎮 Gestione Giochi Interni
+- **Selezione dal Catalogo:** Scegli tra L'Impostore, Miglior Risposta e Chi è più probabile con **Toggle IA Facoltativo** (attiva la generazione dinamica di nuove domande o usa il database ufficiale preimpostato offline).
+- **Creazione con Prompt Diretto all'IA:** Area per inserire prompt personalizzati (fino a 500 caratteri) con regole speciali, aneddoti del gruppo o penitenze.
+- **Scelta Casuale (Randomizer):** Pulsante per pescare all'istante una modalità a sorpresa e lanciare subito il round.
+
+### 2. 🎡 Utility & Sfide Esterne
+- **Ruota della Fortuna Interattiva:** Componente visuale Canvas per sorteggiare giocatori della stanza (per penitenze/ordini), generare squadre casuali (Team A/B) o estrarre sfide fisiche.
+- **Archivio Sfide Web:** Elenco di piattaforme terze (include di default JeopardyLabs e TimeGuessr) con form per aggiungere dinamicamente nuovi link personalizzati salvati in memoria.
 
 ---
 
