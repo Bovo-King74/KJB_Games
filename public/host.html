@@ -1,0 +1,45 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fuori Tema · Schermo principale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Figtree:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css"></head>
+<body><div class="wrap wide" id="app"></div><script src="/qr.js"></script><script src="/app.js"></script><script>
+const A=$('#app');let H={},theme='',mode='impostor',last='';
+const MODES=[['impostor','Impostore'],['best','Miglior risposta'],['likely','Chi è più probabile'],['auto','Scelgo l\'IA']];
+const btn=(id,t,c)=>'<button class="btn '+(c||'')+'" id="'+id+'">'+t+'</button>';
+const act=t=>api({id:'host',token:H.token,type:t,theme,mode});
+const bind=ids=>ids.forEach(i=>{const b=$('#'+i);if(b)b.onclick=()=>act(i);});
+function drawQR(){const q=qrcode(0,'M');q.addData(location.origin+'/?r='+ROOM);q.make();$('#qr').innerHTML=q.createSvgTag(4,2);}
+function lobby(v){
+  const n=v.players.filter(p=>p.online).length;
+  if(last!=='lobby'){
+    A.innerHTML='<h1>Fuori Tema</h1><div class="row"><div class="card"><h3>Entra dal telefono</h3><div id="qr"></div><div>Oppure vai su <b>'+esc(location.host)+'</b> e scrivi il codice</div><div class="bigcode">'+ROOM+'</div></div><div class="card dark"><h3>Giocatori</h3><div id="ch"></div></div></div>'+
+    '<div class="card"><h3>Che gioco facciamo?</h3><div class="chips" id="modes"></div><input class="txt" id="th" placeholder="Descrivi il gioco o il tema (facoltativo): calcio, scuola…"><small id="ai"></small></div>'+btn('start','','pink');
+    $('#th').value=theme;$('#th').oninput=e=>theme=e.target.value;drawQR();$('#start').onclick=()=>act('start');
+    $('#modes').innerHTML=MODES.map(m=>'<button class="chip'+(m[0]===mode?' on':'')+'" data-m="'+m[0]+'">'+m[1]+'</button>').join('');
+    document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll('[data-m]').forEach(x=>x.classList.toggle('on',x===b));});
+  }
+  $('#ch').innerHTML=v.players.length?tiles(v.players,'online'):'<span class="dim">Aspetto i telefoni… inquadra il QR!</span>';
+  $('#start').disabled=n<3;$('#start').textContent=n<3?'Servono 3 giocatori ('+n+'/3)':'Inizia il round '+(v.round+1);
+  $('#ai').textContent=v.ai?'L\'IA inventa domande e sfide.':'Nessuna chiave IA sul sito: uso domande preimpostate.';
+}
+function draw(v){
+  if(v.phase==='lobby'){lobby(v);last='lobby';return;}
+  const ok=v.players.filter(p=>p.in),r=v.result,m=v.mode;let s='';
+  if(v.phase==='loading')s='<h1 class="pop">L\'IA sta preparando il round…</h1>';
+  if(v.phase==='answering')s='<h2>Round '+v.round+': rispondete dal telefono</h2>'+qcard(v)+tiles(ok,'answered')+'<small>'+ok.filter(p=>p.answered).length+'/'+ok.length+' risposte</small>'+btn('discuss','Mostra subito le risposte','ghost');
+  if(v.phase==='discussion')s='<h1>'+(m==='impostor'?'Chi è l\'impostore?':'Ecco le risposte')+'</h1>'+qcard(v)+'<div class="grid">'+answers(v)+'</div>'+btn('tovote','Passa al voto','pink');
+  if(v.phase==='voting')s='<h2>'+(m==='impostor'?'Votate l\'impostore dal telefono':m==='best'?'Votate la risposta migliore':'Votate dal telefono')+'</h2>'+qcard(v)+answers(v)+tiles(ok,'voted')+btn('reveal','Mostra il risultato','ghost');
+  if(v.phase==='reveal'){
+    const tl='<div class="card"><small>Voti ricevuti</small><b>'+(r.tally.map(t=>esc(t.name)+': '+t.n).join(' · ')||'nessun voto')+'</b></div>';
+    s=(m==='impostor'?'<div class="stamp">'+(r.caught?'BECCATO!':'L\'HA SFANGATA!')+'</div><div class="card pop"><small>L\'impostore era</small><div class="q">'+esc(r.impostor)+'</div><span>Tutti: «'+esc(r.q)+'»</span><span>Lui/lei: «'+esc(r.qi)+'»</span></div>'+answers(v)+tl
+      :'<div class="card pop"><small>'+(m==='best'?'Vince':'Il più votato è')+'</small><div class="q">'+esc(r.winner||'nessuno')+'</div></div>'+qcard({q:r.q})+(m==='best'?answers(v):'')+tl)+'<h2>Classifica</h2>'+tiles([...v.players].sort((a,b)=>b.score-a.score))+btn('next','Prossimo round')+btn('lobby','Torna alla lobby','ghost');}
+  if(last!==v.phase||v.phase==='answering'||v.phase==='voting'){A.innerHTML=s;bind(['discuss','tovote','reveal','next','lobby']);}
+  last=v.phase;
+}
+(async()=>{
+  try{H=JSON.parse(sessionStorage.getItem('ftHost')||'{}');}catch(e){}
+  if(!H.room||!H.token){const r=await fetch('/api/create',{method:'POST'}).then(r=>r.json());H={room:r.room,token:r.token};try{sessionStorage.setItem('ftHost',JSON.stringify(H));}catch(e){}}
+  ROOM=H.room;const es=live('id=host&token='+H.token);es.onmessage=e=>draw(JSON.parse(e.data));
+  es.onerror=()=>{if(es.readyState===2){try{sessionStorage.removeItem('ftHost');}catch(e){}location.reload();}};
+})();
+</script></body></html>

@@ -1,0 +1,12 @@
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let ROOM='';
+const COL=['#ff4d9d','#ffd93b','#2ee6b5','#a78bff','#ff8a3d'];
+const col=id=>COL[[...id].reduce((a,c)=>a+c.charCodeAt(0),0)%COL.length];
+const av=(p,s)=>'<span class="av" style="--s:'+(s||48)+'px;--c:'+col(p.id)+'">'+(p.ph?'<img alt="" src="/p/'+ROOM+'/'+p.id+'?v='+p.ph+'">':esc((p.name||'?')[0].toUpperCase()))+'</span>';
+const api=b=>fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({room:ROOM},b))}).then(r=>r.json()).catch(()=>({error:'Connessione assente, riprova.'}));
+const live=q=>{const es=new EventSource('/events?room='+ROOM+'&'+q);return es;};
+const tiles=(list,key)=>'<div class="players">'+list.map(p=>'<div class="pl'+(p.online?'':' off')+'">'+av(p,64)+(key&&p[key]?'<i class="ok">✓</i>':'')+'<span>'+esc(p.name)+'</span><small>'+p.score+' pt</small></div>').join('')+'</div>';
+const answers=v=>'<div class="list">'+(v.answers||[]).map(a=>'<div class="card ans pop">'+av({id:a.id,name:a.name,ph:(v.players.find(p=>p.id===a.id)||{}).ph},54)+'<div><small>'+esc(a.name)+'</small><div class="t">'+esc(a.text)+'</div></div></div>').join('')+'</div>';
+const qcard=v=>v.q?'<div class="card dark pop"><small>La domanda</small><div class="q">'+esc(v.q)+'</div></div>':'';
+const shrink=f=>new Promise(res=>{const i=new Image();i.onload=()=>{const c=document.createElement('canvas');c.width=c.height=160;const m=Math.min(i.width,i.height);c.getContext('2d').drawImage(i,(i.width-m)/2,(i.height-m)/2,m,m,0,0,160,160);res(c.toDataURL('image/jpeg',.72));};i.onerror=()=>res(null);i.src=URL.createObjectURL(f);});
