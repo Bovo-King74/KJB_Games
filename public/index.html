@@ -149,11 +149,13 @@
 
         <div class="games-grid">
           ${MINIGAMES.map(g => `
-            <div class="game-card" style="--card-accent:${g.accent}">
+            <div class="game-card ${!g.isLive ? 'game-card-coming-soon' : ''}" 
+                 style="--card-accent:${g.accent}"
+                 ${!g.isLive ? 'title="Modalità in arrivo: in fase di rifinitura per le prossime serate KJB!" tabindex="0"' : ''}>
               <div class="game-card-top">
                 <div class="game-icon-box">${g.icon}</div>
                 <span class="game-status-tag ${g.isLive ? 'live' : 'ai-ready'}">
-                  ${g.isLive ? '● Giocabile Ora' : g.badge || 'AI Ready'}
+                  ${g.isLive ? '● Giocabile Ora' : g.badge || 'In arrivo'}
                 </span>
               </div>
               <div class="game-title">${esc(g.title)}</div>
@@ -161,6 +163,11 @@
               <div style="font-size:12px;color:var(--gold);background:rgba(245,158,11,0.08);padding:6px 10px;border-radius:8px">
                 💡 <b>Regola:</b> ${esc(g.rulesHint)}
               </div>
+              ${!g.isLive ? `
+                <div class="coming-soon-banner">
+                  <span>🔒 In arrivo • Modalità speciale della prossima stagione KJB</span>
+                </div>
+              ` : ''}
               <div class="game-meta-row">
                 <span class="game-meta-item">👥 ${esc(g.players)}</span>
                 <span class="game-meta-item">⏱️ ${esc(g.duration)}</span>
@@ -215,7 +222,7 @@
       `;
 
       const msg = (t, sub = '') => `
-        <div class="card elevated pop" style="text-align:center;gap:10px">
+        <div class="card elevated pop" style="text-align:center;gap:10px" role="status" aria-live="polite">
           <h2>${t}</h2>
           ${sub ? `<p class="subtext">${sub}</p>` : ''}
         </div>
@@ -294,7 +301,7 @@
                 <small style="font-weight:700;color:var(--text-muted);display:block;margin-bottom:8px">TOCCA UN GIOCATORE PER VOTARE:</small>
                 <div style="display:flex;flex-direction:column;gap:10px">
                   ${inR.filter(p => p.id !== me.id).map(p => `
-                    <button class="btn secondary" style="justify-content:flex-start;padding:12px 18px" data-v="${p.id}">
+                    <button class="btn secondary" style="justify-content:flex-start;padding:12px 18px" data-v="${p.id}" aria-label="Vota per ${esc(p.name)}">
                       ${av(p, 42)}
                       <span style="font-size:18px;margin-left:6px">${esc(p.name)}</span>
                     </button>
@@ -344,16 +351,36 @@
 
       const sb = $('#s');
       if (sb) {
-        const go = () => {
-          const t = $('#a').value;
-          if (t.trim()) api({ type: 'answer', id: S.id, text: t });
+        const go = async () => {
+          const inp = $('#a');
+          const t = inp ? inp.value.trim() : '';
+          if (!t) return;
+          sb.disabled = true;
+          sb.textContent = 'Invio in corso...';
+          const r = await api({ type: 'answer', id: S.id, text: t });
+          if (r && r.error) {
+            sb.disabled = false;
+            sb.textContent = 'Invia Risposta';
+            alert(r.error);
+          }
+          // In caso di successo, l'aggiornamento SSE mostrerà la schermata 'Risposta inviata'
         };
         sb.onclick = go;
         $('#a').onkeydown = e => e.key === 'Enter' && go();
       }
 
       document.querySelectorAll('[data-v]').forEach(b => {
-        b.onclick = () => api({ type: 'vote', id: S.id, target: b.dataset.v });
+        b.onclick = async () => {
+          document.querySelectorAll('[data-v]').forEach(btn => btn.disabled = true);
+          const origText = b.innerHTML;
+          b.innerHTML = '<span style="font-size:16px;font-weight:700">Invio voto...</span>';
+          const r = await api({ type: 'vote', id: S.id, target: b.dataset.v });
+          if (r && r.error) {
+            document.querySelectorAll('[data-v]').forEach(btn => btn.disabled = false);
+            b.innerHTML = origText;
+            alert(r.error);
+          }
+        };
       });
     }
 

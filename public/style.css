@@ -459,6 +459,32 @@ small {
   background: linear-gradient(160deg, rgba(245, 158, 11, 0.09) 0%, var(--surface-card) 60%);
 }
 
+.game-card.game-card-coming-soon {
+  opacity: 0.82;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.game-card.game-card-coming-soon:hover {
+  transform: none;
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+
+.coming-soon-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px dashed var(--border-gold);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
 .game-card-top {
   display: flex;
   align-items: flex-start;

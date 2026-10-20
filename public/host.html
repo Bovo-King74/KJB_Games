@@ -21,6 +21,7 @@
     let macroSection = 'games'; // 'games' | 'utilities'
     let activePresetId = 'fanta';
     let customAiPrompt = '';
+    let lobbyRendered = false; // Fix 1: tracks whether the lobby skeleton has been rendered
 
     // Wheel of Fortune State
     let wheelMode = 'players'; // 'players' | 'challenges' | 'teams'
@@ -89,6 +90,39 @@
       currentPlayers = v.players ? v.players.filter(p => p.online) : [];
       const n = currentPlayers.length;
 
+      // Preserve any custom AI prompt input typed by the host before re-render
+      const promptInput = $('#custom-prompt-input');
+      if (promptInput) customAiPrompt = promptInput.value;
+
+      // Differential DOM update if lobby was already rendered and phase hasn't changed
+      if (lobbyRendered && last === 'lobby') {
+        const countPill = $('#player-count-pill');
+        if (countPill) countPill.textContent = `${n} Connessi`;
+
+        const ch = $('#ch');
+        if (ch) ch.innerHTML = v.players.length ? tiles(v.players, 'online') : '<span style="color:var(--text-dim);font-size:14px">In attesa che i telefoni inquadrino il QR code...</span>';
+
+        const warnEl = $('#roster-warning');
+        if (warnEl) warnEl.innerHTML = n < 3 ? '<small style="color:var(--gold)">⚠️ Servono almeno 3 giocatori per avviare una partita interna.</small>' : '';
+
+        const activeGameObj = HOST_MODES.find(m => m.id === mode) || HOST_MODES[0];
+        const btnCat = $('#start-catalog');
+        if (btnCat) {
+          btnCat.disabled = n < 3;
+          btnCat.innerHTML = `<span>🚀 Avvia ${esc(activeGameObj.name)} ${n < 3 ? `(${n}/3 giocatori)` : ''}</span>`;
+        }
+
+        const btnCustom = $('#start-custom-ai');
+        if (btnCustom) btnCustom.disabled = n < 3;
+
+        const btnRand = $('#start-randomizer');
+        if (btnRand) btnRand.disabled = n < 3;
+
+        return;
+      }
+
+      lobbyRendered = true;
+
       A.innerHTML = `
         ${renderHostHeader()}
 
@@ -119,12 +153,12 @@
             <div class="card elevated">
               <div style="display:flex;align-items:center;justify-content:space-between">
                 <h3>Rosa Giocatori</h3>
-                <span class="status-pill">${n} Connessi</span>
+                <span class="status-pill" id="player-count-pill">${n} Connessi</span>
               </div>
               <div id="ch">
                 ${v.players.length ? tiles(v.players, 'online') : '<span style="color:var(--text-dim);font-size:14px">In attesa che i telefoni inquadrino il QR code...</span>'}
               </div>
-              ${n < 3 ? '<small style="color:var(--gold)">⚠️ Servono almeno 3 giocatori per avviare una partita interna.</small>' : ''}
+              <div id="roster-warning">${n < 3 ? '<small style="color:var(--gold)">⚠️ Servono almeno 3 giocatori per avviare una partita interna.</small>' : ''}</div>
             </div>
           </div>
 
@@ -140,10 +174,12 @@
       // Navigation listeners
       $('#nav-games').onclick = () => {
         macroSection = 'games';
+        lobbyRendered = false;
         lobby(v);
       };
       $('#nav-utilities').onclick = () => {
         macroSection = 'utilities';
+        lobbyRendered = false;
         lobby(v);
         initWheel();
       };
@@ -267,6 +303,7 @@
       document.querySelectorAll('[data-m]').forEach(b => {
         b.onclick = () => {
           mode = b.dataset.m;
+          lobbyRendered = false;
           lobby(v);
         };
       });
@@ -276,6 +313,7 @@
       if (aiToggle) {
         aiToggle.onchange = e => {
           useAi = e.target.checked;
+          lobbyRendered = false;
           lobby(v);
         };
       }
@@ -286,6 +324,7 @@
           activePresetId = chip.dataset.p;
           const found = AI_PRESETS.find(p => p.id === activePresetId);
           if (found) theme = found.prompt;
+          lobbyRendered = false;
           lobby(v);
         };
       });
@@ -610,6 +649,7 @@
         last = 'lobby';
         return;
       }
+      lobbyRendered = false; // Reset so next return to lobby will perform full render
 
       const ok = v.players.filter(p => p.in);
       const r = v.result;
