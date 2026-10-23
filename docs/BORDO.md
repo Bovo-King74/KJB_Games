@@ -38,6 +38,17 @@
 - [x] Riformattazione completa di `server.js` con sezioni architetturali ben delimitate, commenti tecnici e rimozione minificazione
 - [x] Aggiunti script npm per sviluppo locale (`"dev": "node --watch server.js"`) e standardizzazione `"type": "commonjs"`
 
+### Round 4 — Redesign Grafico Completo & Nuove Funzionalità Arcade
+- [x] Nuova Palette Dark Gradient Neon (`#0A0E17` ➔ `#121826`) con Glassmorphism (`backdrop-filter: blur(14px)`)
+- [x] Pulsante primario CTA Arancione Neon Energetico (`#FF8C00` ➔ `#FF5E00`) con bagliore e ombre dinamiche
+- [x] Input Codice a 4 caselle separate con avanzamento automatico, gestione backspace e paste
+- [x] Scanner QR Code integrato con fotocamera tramite `BarcodeDetector` e fallback
+- [x] Generatore di Avatar Arcade con 16 icone emoji e rendering su canvas per piena compatibilità server
+- [x] Modalità "Quick Join" per rientro istantaneo con un solo tap se presente una sessione precedente salvata
+- [x] Motore audio con Web Audio API (sintesi pura zero-asset: tap, success, fanfare, error) e Haptic Feedback mobile
+- [x] Layout responsive avanzato: Vista Mobile ottimizzata a "100vh fit" senza scroll superfluo e Vista Desktop/Tablet a 2 colonne affiancate con pannello informativo e regole live
+- [x] Eliminazione ridondanza tasto Host da mobile sostituito da footer discreto non invasivo
+
 ---
 
 ## 📌 Mansioni da Svolgere

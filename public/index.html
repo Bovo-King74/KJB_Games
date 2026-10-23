@@ -16,6 +16,10 @@
   <script>
     const A = $('#app');
     let S = {}, photo = null, key = '', es = null, activeTab = 'join';
+    let soundEnabled = true;
+    let audioCtx = null;
+    let qrScannerStream = null;
+
     try { S = JSON.parse(localStorage.getItem('ft') || '{}'); } catch(e) {}
     const save = () => { try { localStorage.setItem('ft', JSON.stringify(S)); } catch(e) {} };
     if (!/^[0-9a-f]{32}$/.test(S.id || '')) {
@@ -26,24 +30,299 @@
     }
     const urlRoom = (new URLSearchParams(location.search).get('r') || '').toUpperCase();
 
-    function renderHeader(extraRight = '') {
+    // ─────────────────────────────────────────────────────────────
+    // WEB AUDIO API SYNTHESIZER & HAPTIC FEEDBACK
+    // ─────────────────────────────────────────────────────────────
+    function playSound(type) {
+      if (!soundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const t = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'tap') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(480, t);
+          osc.frequency.exponentialRampToValueAtTime(880, t + 0.05);
+          gain.gain.setValueAtTime(0.08, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+          osc.start(t);
+          osc.stop(t + 0.05);
+        } else if (type === 'success') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(523.25, t);
+          osc.frequency.setValueAtTime(659.25, t + 0.06);
+          osc.frequency.setValueAtTime(783.99, t + 0.12);
+          gain.gain.setValueAtTime(0.12, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+          osc.start(t);
+          osc.stop(t + 0.25);
+        } else if (type === 'fanfare') {
+          [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.type = 'square';
+            o.frequency.setValueAtTime(freq, t + idx * 0.07);
+            g.gain.setValueAtTime(0.07, t + idx * 0.07);
+            g.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.07 + 0.14);
+            o.start(t + idx * 0.07);
+            o.stop(t + idx * 0.07 + 0.14);
+          });
+        } else if (type === 'error') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(220, t);
+          osc.frequency.exponentialRampToValueAtTime(110, t + 0.15);
+          gain.gain.setValueAtTime(0.12, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+          osc.start(t);
+          osc.stop(t + 0.15);
+        }
+      } catch(e) {}
+    }
+
+    function haptic(ms = 15) {
+      if (navigator.vibrate) {
+        try { navigator.vibrate(ms); } catch(e) {}
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ARCADE AVATAR GENERATOR (Canvas -> JPEG compatible with setPhoto)
+    // ─────────────────────────────────────────────────────────────
+    const ARCADE_AVATARS = ['⚽', '👑', '🦁', '🕶️', '🚀', '🍕', '👾', '🏆', '⚡', '🎸', '🐯', '🔥', '🎯', '💎', '🤖', '🐱'];
+
+    function generateAvatar(emoji, bgCol = '#0d1629') {
+      const c = document.createElement('canvas');
+      c.width = c.height = 160;
+      const ctx = c.getContext('2d');
+      const grad = ctx.createRadialGradient(80, 80, 10, 80, 80, 80);
+      grad.addColorStop(0, bgCol);
+      grad.addColorStop(1, '#050811');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 160, 160);
+      ctx.strokeStyle = '#00F2FE';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(80, 80, 75, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.font = '76px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(emoji, 80, 86);
+      return c.toDataURL('image/jpeg', 0.85);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // MODALS: AVATAR PICKER, QR SCANNER, INFO & REGOLE
+    // ─────────────────────────────────────────────────────────────
+    function openAvatarPicker() {
+      playSound('tap');
+      haptic(15);
+      let modal = $('#avatar-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'avatar-modal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+      }
+      modal.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-header">
+            <div class="modal-title"><span>🎭</span> Scegli Avatar Arcade</div>
+            <button class="modal-close-btn" id="close-avatar-modal">×</button>
+          </div>
+          <p class="subtext" style="font-size:13px">Tocca un'icona arcade da assegnare al tuo profilo partita:</p>
+          <div class="avatar-grid">
+            ${ARCADE_AVATARS.map(em => `
+              <button class="avatar-choice-btn" data-emoji="${em}">${em}</button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      modal.style.display = 'flex';
+
+      $('#close-avatar-modal').onclick = () => { modal.style.display = 'none'; };
+      modal.onclick = e => { if (e.target === modal) modal.style.display = 'none'; };
+
+      modal.querySelectorAll('[data-emoji]').forEach(btn => {
+        btn.onclick = () => {
+          const em = btn.dataset.emoji;
+          photo = generateAvatar(em);
+          const pv = $('#pv');
+          if (pv) pv.innerHTML = `<img src="${photo}" alt="${em}">`;
+          playSound('success');
+          haptic(25);
+          modal.style.display = 'none';
+        };
+      });
+    }
+
+    async function openQRScanner(onScanned) {
+      playSound('tap');
+      haptic(15);
+      let modal = $('#qr-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'qr-modal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+      }
+      modal.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-header">
+            <div class="modal-title"><span>📷</span> Scansiona QR Code TV</div>
+            <button class="modal-close-btn" id="close-qr-modal">×</button>
+          </div>
+          <p class="subtext" style="font-size:13px">Inquadra il codice QR mostrato sullo schermo TV o computer dell'Host:</p>
+          <div class="scanner-container">
+            <video class="scanner-video" id="scanner-vid" autoplay playsinline muted></video>
+            <div class="scanner-target-box">
+              <div class="scanner-laser"></div>
+            </div>
+          </div>
+          <div id="scanner-status" style="font-size:12px;color:var(--neon-cyan);text-align:center">Avvio fotocamera in corso...</div>
+          <div style="display:flex;gap:10px">
+            <button class="btn secondary" id="btn-cancel-scan" style="padding:10px">Annulla</button>
+          </div>
+        </div>
+      `;
+      modal.style.display = 'flex';
+
+      const closeScanner = () => {
+        if (qrScannerStream) {
+          qrScannerStream.getTracks().forEach(t => t.stop());
+          qrScannerStream = null;
+        }
+        modal.style.display = 'none';
+      };
+
+      $('#close-qr-modal').onclick = closeScanner;
+      $('#btn-cancel-scan').onclick = closeScanner;
+      modal.onclick = e => { if (e.target === modal) closeScanner(); };
+
+      try {
+        qrScannerStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } }
+        });
+        const videoEl = $('#scanner-vid');
+        videoEl.srcObject = qrScannerStream;
+        await videoEl.play();
+        $('#scanner-status').textContent = 'Punta la fotocamera verso il QR code dello schermo TV';
+
+        if ('BarcodeDetector' in window) {
+          const detector = new BarcodeDetector({ formats: ['qr_code'] });
+          let scanning = true;
+          const scanFrame = async () => {
+            if (!scanning || modal.style.display === 'none') return;
+            try {
+              const codes = await detector.detect(videoEl);
+              if (codes && codes.length > 0) {
+                const rawVal = codes[0].rawValue || '';
+                let foundCode = '';
+                const matchUrl = /r=([A-Z]{4})/i.exec(rawVal);
+                if (matchUrl) {
+                  foundCode = matchUrl[1].toUpperCase();
+                } else if (/^[A-Z]{4}$/i.test(rawVal.trim())) {
+                  foundCode = rawVal.trim().toUpperCase();
+                }
+                if (foundCode) {
+                  scanning = false;
+                  closeScanner();
+                  playSound('success');
+                  haptic(35);
+                  onScanned(foundCode);
+                  return;
+                }
+              }
+            } catch(err) {}
+            if (scanning) requestAnimationFrame(scanFrame);
+          };
+          requestAnimationFrame(scanFrame);
+        } else {
+          $('#scanner-status').textContent = 'Scanner automatico non supportato dal browser. Digita le 4 lettere.';
+        }
+      } catch (err) {
+        $('#scanner-status').textContent = 'Impossibile accedere alla fotocamera. Inserisci il codice a mano.';
+      }
+    }
+
+    function openInfoModal() {
+      playSound('tap');
+      haptic(15);
+      let modal = $('#info-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'info-modal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+      }
+      modal.innerHTML = `
+        <div class="modal-card">
+          <div class="modal-header">
+            <div class="modal-title"><span>ℹ️</span> Zughi del KJB • Info & Regole</div>
+            <button class="modal-close-btn" id="close-info-modal">×</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;color:var(--text-muted);line-height:1.5">
+            <div>
+              <b style="color:var(--neon-orange)">Cos'è Zughi del KJB?</b>
+              <p style="margin-top:2px">Un party arcade per giocare tutti insieme dal vivo. Un computer o TV fa da tabellone (Host) con QR code, e ciascuno risponde e vota dallo smartphone.</p>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);padding:10px 12px;border-radius:var(--radius-sm);border-left:3px solid var(--neon-cyan)">
+              <b style="color:var(--neon-cyan)">🕵️ L'Impostore:</b>
+              <p style="margin-top:2px">Tutti ricevono una domanda segreta, tranne uno che ne riceve una simile ma diversa. Risposte rapide in 1-3 parole, poi si vota chi è fuori tema!</p>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);padding:10px 12px;border-radius:var(--radius-sm);border-left:3px solid var(--rose)">
+              <b style="color:var(--rose)">🏆 Miglior Risposta:</b>
+              <p style="margin-top:2px">Sfida di creatività e risate. L'IA genera lo spunto assurdo, tutti rispondono anonimamente e si vota la battuta migliore.</p>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);padding:10px 12px;border-radius:var(--radius-sm);border-left:3px solid var(--blue)">
+              <b style="color:var(--blue)">👀 Chi è più probabile?</b>
+              <p style="margin-top:2px">Domande pungenti sul gruppo. Si vota direttamente il compagno più probabile a fare la figuraccia.</p>
+            </div>
+          </div>
+          <button class="btn secondary" id="btn-close-info" style="margin-top:4px">Ho capito, andiamo! ⚽</button>
+        </div>
+      `;
+      modal.style.display = 'flex';
+      $('#close-info-modal').onclick = () => { modal.style.display = 'none'; };
+      $('#btn-close-info').onclick = () => { modal.style.display = 'none'; };
+      modal.onclick = e => { if (e.target === modal) modal.style.display = 'none'; };
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // HEADER & VIEWS
+    // ─────────────────────────────────────────────────────────────
+    function renderHeader() {
       return `
         <header class="brand-header">
           <a class="brand-badge" href="/">
-            ${kjbCrestSvg(46)}
+            ${kjbCrestSvg(44)}
             <div class="brand-title-wrap">
               <span class="brand-title">Zughi del KJB</span>
               <span class="brand-subtitle">Party Arcade • 18+</span>
             </div>
           </a>
-          <div>${extraRight}</div>
+          <div class="header-actions-group">
+            <button class="header-icon-btn" id="btn-sound-toggle" title="Attiva/Disattiva Suoni Party">
+              <span id="sound-icon">${soundEnabled ? '🔊' : '🔇'}</span>
+            </button>
+            <button class="header-icon-btn" id="btn-info-modal" title="Regole e Info del Club">
+              <span>❓</span>
+            </button>
+          </div>
         </header>
       `;
     }
 
     function home() {
       A.innerHTML = `
-        ${renderHeader('<a class="btn secondary" style="padding:8px 14px;font-size:14px;width:auto" href="/host">📺 Schermo Host</a>')}
+        ${renderHeader()}
 
         <div class="tabs-bar">
           <button class="tab-btn ${activeTab === 'join' ? 'active' : ''}" id="tab-join">⚡ Entra in Gioco</button>
@@ -53,8 +332,16 @@
         <div id="tab-content"></div>
       `;
 
-      $('#tab-join').onclick = () => { activeTab = 'join'; home(); };
-      $('#tab-games').onclick = () => { activeTab = 'games'; home(); };
+      $('#btn-sound-toggle').onclick = () => {
+        soundEnabled = !soundEnabled;
+        $('#sound-icon').textContent = soundEnabled ? '🔊' : '🔇';
+        if (soundEnabled) playSound('tap');
+        haptic(15);
+      };
+      $('#btn-info-modal').onclick = openInfoModal;
+
+      $('#tab-join').onclick = () => { playSound('tap'); haptic(10); activeTab = 'join'; home(); };
+      $('#tab-games').onclick = () => { playSound('tap'); haptic(10); activeTab = 'games'; home(); };
 
       if (activeTab === 'join') {
         renderJoinTab();
@@ -65,98 +352,275 @@
 
     function renderJoinTab() {
       const tc = $('#tab-content');
+      const hasSavedSession = Boolean(S.room && S.name);
+
       tc.innerHTML = `
-        <div class="card elevated" style="gap:20px">
-          <div>
-            <h3>Entra nella Stanza</h3>
-            <p class="subtext">Inquadra il QR dello schermo o digita il codice a 4 lettere.</p>
-          </div>
+        <div class="desktop-split-layout">
+          <!-- Colonna Sinistra: Form d'Ingresso Smartphone & Desktop -->
+          <div class="client-column">
+            <!-- Modalità Quick Join via Salvataggio Sessione -->
+            ${hasSavedSession ? `
+              <div class="quick-join-banner" id="qj-banner" style="margin-bottom:12px">
+                <div class="quick-join-content">
+                  <span class="quick-join-badge">⚡ RIENTRO RAPIDO SALVATO</span>
+                  <div class="quick-join-text">
+                    Stanza <b style="color:var(--neon-cyan)">${esc(S.room)}</b> come <b style="color:var(--neon-orange)">${esc(S.name)}</b>
+                  </div>
+                </div>
+                <button type="button" class="btn-quick-join" id="btn-qj-go">
+                  <span>Rientra 🚀</span>
+                </button>
+              </div>
+            ` : ''}
 
-          <label class="selfie-slot" for="f">
-            <span class="selfie-avatar-ring" id="pv">
-              ${photo ? `<img src="${photo}" alt="Selfie">` : '📷'}
-            </span>
-            <div>
-              <b style="color:var(--text-main);font-size:15px">${photo ? 'Cambia il tuo selfie' : 'Scatta un selfie da gara'}</b>
-              <br><small style="color:var(--text-muted)">Facoltativa. Visibile ai partecipanti e conservata in memoria per la durata della stanza.</small>
+            <div class="card elevated" style="gap:14px">
+              <div>
+                <h3 style="font-size:19px">Entra nella Stanza</h3>
+                <p class="subtext" style="font-size:13.5px">Inquadra il QR dello schermo TV o digita il codice a 4 lettere.</p>
+              </div>
+
+              <!-- Campo Codice a 4 Caselle ad avanzamento automatico -->
+              <div class="code-boxes-wrap">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <small style="font-weight:800;color:var(--neon-cyan);letter-spacing:0.06em">CODICE STANZA</small>
+                  <small style="color:var(--text-dim);font-size:11.5px">4 lettere maiuscole</small>
+                </div>
+                <div class="code-boxes-container">
+                  <input class="code-box" id="c0" maxlength="1" autocomplete="off" autocapitalize="characters" inputmode="text" data-idx="0">
+                  <input class="code-box" id="c1" maxlength="1" autocomplete="off" autocapitalize="characters" inputmode="text" data-idx="1">
+                  <input class="code-box" id="c2" maxlength="1" autocomplete="off" autocapitalize="characters" inputmode="text" data-idx="2">
+                  <input class="code-box" id="c3" maxlength="1" autocomplete="off" autocapitalize="characters" inputmode="text" data-idx="3">
+                  <button type="button" class="btn-qr-scan" id="btn-qr-open" title="Scansiona QR con la fotocamera">
+                    <span style="font-size:19px">📷</span>
+                    <span>Scan</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Input Nickname -->
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <small style="font-weight:800;color:var(--text-muted)">IL TUO NICKNAME</small>
+                <input class="txt" id="n" maxlength="14" placeholder="Es. Bomber99" autocomplete="off" value="${esc(S.name || '')}">
+              </div>
+
+              <!-- Foto Profilo / Avatar Arcade -->
+              <div class="avatar-selection-row">
+                <div class="avatar-preview-ring" id="pv">
+                  ${photo ? `<img src="${photo}" alt="Avatar">` : '⚽'}
+                </div>
+                <div class="avatar-actions-wrap">
+                  <label class="btn-avatar-action" for="f">
+                    <span>📸 Scatta Selfie</span>
+                  </label>
+                  <button type="button" class="btn-avatar-action cyan" id="btn-choose-avatar">
+                    <span>🎭 Scegli Avatar Arcade</span>
+                  </button>
+                </div>
+              </div>
+              <input id="f" type="file" accept="image/*" capture="user" hidden>
+
+              <!-- Checkbox Maggiorenni -->
+              <label style="display:flex;align-items:center;gap:10px;color:var(--text-muted);font-size:12.5px;cursor:pointer">
+                <input id="age-confirm" type="checkbox" style="width:16px;height:16px;accent-color:var(--neon-orange)" checked>
+                <span>Confermo di avere almeno 18 anni (Party Game per maggiorenni).</span>
+              </label>
+
+              <div class="err" id="e"></div>
+
+              <!-- Pulsante Principale CTA Arancione Neon -->
+              <button class="btn" id="go">
+                <span>🚀 ENTRA NEL MATCH</span>
+              </button>
+
+              <!-- Footer Discreto per Console Host -->
+              <div class="host-discreet-footer">
+                <span style="color:var(--text-dim)">Sei l'Host della serata?</span>
+                <a class="host-link-pill" href="/host">
+                  <span>📺 Apri Console TV Host ↗</span>
+                </a>
+              </div>
             </div>
-          </label>
-          <input id="f" type="file" accept="image/*" capture="user" hidden>
-
-          <div class="code-input-wrap">
-            <small style="font-weight:700;color:var(--gold)">CODICE STANZA</small>
-            <input class="txt code" id="c" maxlength="4" placeholder="ABCD" autocomplete="off" autocapitalize="characters" value="${esc(urlRoom || S.room || '')}">
           </div>
 
-          <div style="display:flex;flex-direction:column;gap:6px">
-            <small style="font-weight:700;color:var(--text-muted)">IL TUO NOME O NICKNAME</small>
-            <input class="txt" id="n" maxlength="14" placeholder="Es. Bomber99" autocomplete="off" value="${esc(S.name || '')}">
-          </div>
+          <!-- Colonna Destra: Pannello Stabilità & Info (Schermi Ampi) -->
+          <div class="desktop-info-column">
+            <div class="info-panel-box">
+              <div class="info-panel-title">
+                <span>🎮 Stanza Attiva</span>
+                <span class="room-live-pill" id="room-status-indicator">● Pronta</span>
+              </div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between">
+                <span style="font-size:13px;color:var(--text-muted)">Codice rilevato:</span>
+                <b style="font-family:var(--font-disp);font-size:24px;color:var(--neon-cyan);letter-spacing:0.12em" id="live-room-preview">----</b>
+              </div>
+              <p style="font-size:13px;color:var(--text-muted);margin-top:2px">
+                Inquadra il QR sullo schermo principale o digita le 4 lettere per unirti immediatamente alla lobby.
+              </p>
+            </div>
 
-          <label style="display:flex;align-items:flex-start;gap:10px;color:var(--text-muted);font-size:13px;line-height:1.4">
-            <input id="age-confirm" type="checkbox" style="margin-top:2px;accent-color:var(--gold)">
-            <span>Confermo di avere almeno 18 anni. Il servizio non verifica i documenti d’identità.</span>
-          </label>
-
-          <div class="err" id="e"></div>
-          <p class="subtext" style="font-size:12px">Usando il gioco, i dati inseriti vengono trattati secondo l’<a href="/privacy" target="_blank" rel="noopener noreferrer">informativa privacy</a>. Non inserire dati sensibili o informazioni di altre persone.</p>
-
-          <button class="btn" id="go">
-            <span>⚽ Entra nel Match</span>
-          </button>
-        </div>
-
-        <div class="card" style="background:rgba(255,255,255,0.02);border-style:dashed">
-          <div style="display:flex;align-items:center;gap:12px">
-            <span style="font-size:28px">📺</span>
-            <div>
-              <b style="font-size:15px">Stai ospitando la serata su TV o computer?</b>
-              <p style="font-size:13px;color:var(--text-muted);margin-top:2px">Apri la schermata Host per proiettare il tabellone con QR code e controllo IA.</p>
+            <div class="info-panel-box">
+              <div class="info-panel-title">
+                <span>🎲 Minigioco in Evidenza</span>
+                <span style="font-size:11px;color:var(--gold);font-weight:700">8 Modalità</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:28px">🕵️</span>
+                <div>
+                  <b style="font-size:15px;color:var(--text-main)">L'Impostore</b>
+                  <div style="font-size:12px;color:var(--text-muted)">Deduzione & Bluff • 3-12 Giocatori</div>
+                </div>
+              </div>
+              <div style="background:rgba(255,255,255,0.03);padding:10px 12px;border-radius:var(--radius-sm);border-left:3px solid var(--neon-cyan);font-size:13px;color:var(--text-main);line-height:1.4">
+                💡 <b>Consiglio dell'IA:</b> "Risposte brevi da 1-3 parole per non scoprirvi subito se siete l'infiltrato."
+              </div>
+              <button class="btn secondary" id="btn-show-catalog-quick" style="padding:8px 12px;font-size:13px;margin-top:4px">
+                <span>Sfoglia tutti i minigiochi ↗</span>
+              </button>
             </div>
           </div>
-          <a class="btn secondary" href="/host" style="margin-top:4px">Apri Console Host</a>
         </div>
       `;
 
+      // ── Gestione 4 Caselle Codice ─────────────────────────────────
+      const boxes = [$('#c0'), $('#c1'), $('#c2'), $('#c3')];
+      
+      const getCode = () => boxes.map(b => b.value).join('').toUpperCase();
+      
+      const setCode = val => {
+        const clean = String(val || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+        boxes.forEach((b, i) => { b.value = clean[i] || ''; });
+        const preview = $('#live-room-preview');
+        if (preview) preview.textContent = clean ? clean.padEnd(4, '-') : '----';
+      };
+
+      boxes.forEach((box, i) => {
+        box.oninput = () => {
+          const v = box.value.toUpperCase().replace(/[^A-Z]/g, '');
+          box.value = v.slice(-1);
+          playSound('tap');
+          haptic(10);
+          if (box.value && i < 3) {
+            boxes[i + 1].focus();
+            boxes[i + 1].select();
+          }
+          const full = getCode();
+          const preview = $('#live-room-preview');
+          if (preview) preview.textContent = full ? full.padEnd(4, '-') : '----';
+          if (full.length === 4) {
+            playSound('success');
+            haptic(25);
+          }
+        };
+
+        box.onkeydown = e => {
+          if (e.key === 'Backspace' && !box.value && i > 0) {
+            boxes[i - 1].focus();
+          } else if (e.key === 'ArrowLeft' && i > 0) {
+            boxes[i - 1].focus();
+          } else if (e.key === 'ArrowRight' && i < 3) {
+            boxes[i + 1].focus();
+          }
+        };
+
+        box.onpaste = e => {
+          e.preventDefault();
+          const paste = (e.clipboardData || window.clipboardData).getData('text');
+          setCode(paste);
+          const nextIdx = Math.min(paste.length, 3);
+          boxes[nextIdx].focus();
+        };
+      });
+
+      // Pre-fill da URL o sessione
+      const initRoom = urlRoom || S.room || '';
+      if (initRoom) setCode(initRoom);
+
+      // ── Listener Scanner QR & Avatar Picker ───────────────────────
+      $('#btn-qr-open').onclick = () => {
+        openQRScanner(code => {
+          setCode(code);
+          const nameInput = $('#n');
+          if (nameInput && !nameInput.value) nameInput.focus();
+        });
+      };
+
+      $('#btn-choose-avatar').onclick = openAvatarPicker;
+
+      const btnCatQuick = $('#btn-show-catalog-quick');
+      if (btnCatQuick) {
+        btnCatQuick.onclick = () => { activeTab = 'games'; home(); };
+      }
+
+      // ── Selfie Capture ───────────────────────────────────────────
       $('#f').onchange = async e => {
         if (e.target.files[0]) {
           photo = await shrink(e.target.files[0]);
           const pv = $('#pv');
           if (pv) pv.innerHTML = photo ? `<img src="${photo}" alt="Selfie">` : '📷';
+          playSound('success');
+          haptic(20);
         }
       };
 
-      $('#go').onclick = async () => {
-        const room = $('#c').value.trim().toUpperCase();
-        const name = $('#n').value.trim();
-        if (room.length !== 4) return $('#e').textContent = 'Il codice deve avere esattamente 4 lettere.';
-        if (!name) return $('#e').textContent = 'Inserisci il tuo nome per giocare.';
-        if (!$('#age-confirm').checked) return $('#e').textContent = 'Per giocare devi confermare di avere almeno 18 anni.';
-        
+      // ── Esecuzione Entrata ────────────────────────────────────────
+      const performJoin = async (roomCode, playerName) => {
+        if (roomCode.length !== 4) {
+          playSound('error');
+          haptic(30);
+          return $('#e').textContent = 'Il codice deve avere esattamente 4 lettere.';
+        }
+        if (!playerName) {
+          playSound('error');
+          haptic(30);
+          return $('#e').textContent = 'Inserisci il tuo nome o nickname per giocare.';
+        }
+        if (!$('#age-confirm').checked) {
+          playSound('error');
+          haptic(30);
+          return $('#e').textContent = 'Per giocare devi confermare di avere almeno 18 anni.';
+        }
+
         $('#go').disabled = true;
         $('#go').textContent = 'Connessione in corso...';
-        ROOM = room;
+        ROOM = roomCode;
 
-        const r = await api({ type: 'join', id: S.id, name, photo, adult: true });
+        const r = await api({ type: 'join', id: S.id, name: playerName, photo, adult: true });
         if (r.error) {
+          playSound('error');
+          haptic(40);
           $('#e').textContent = r.error;
           $('#go').disabled = false;
-          $('#go').textContent = '⚽ Entra nel Match';
+          $('#go').textContent = '🚀 ENTRA NEL MATCH';
           return;
         }
 
-        S.room = room;
+        playSound('fanfare');
+        haptic(35);
+        S.room = roomCode;
         S.name = r.name;
         save();
         play();
       };
+
+      $('#go').onclick = () => {
+        performJoin(getCode(), $('#n').value.trim());
+      };
+
+      const qjBtn = $('#btn-qj-go');
+      if (qjBtn) {
+        qjBtn.onclick = () => {
+          setCode(S.room);
+          $('#n').value = S.name;
+          performJoin(S.room, S.name);
+        };
+      }
     }
 
     function renderGamesCatalogTab() {
       const tc = $('#tab-content');
       tc.innerHTML = `
-        <div style="margin-bottom:8px">
-          <p class="subtext">Sfoglia la collezione dei minigiochi multiplayer per serate tra amici, tutti personalizzabili dall'IA.</p>
+        <div style="margin-bottom:10px">
+          <p class="subtext" style="font-size:14px">Sfoglia la collezione dei minigiochi multiplayer del Club Zughi del KJB, tutti personalizzabili dall'IA.</p>
         </div>
 
         <div class="games-grid">
@@ -191,6 +655,9 @@
       `;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // GIOCO LIVE & CICLO ROUND
+    // ─────────────────────────────────────────────────────────────
     function play() {
       history.replaceState(null, '', '/');
       key = '';
@@ -228,7 +695,7 @@
           </div>
           <div>
             <small style="color:var(--text-muted)">Stanza</small><br>
-            <b class="disp" style="font-size:22px;letter-spacing:0.1em;color:var(--gold)">${v.code}</b>
+            <b class="disp" style="font-size:22px;letter-spacing:0.1em;color:var(--neon-cyan)">${v.code}</b>
           </div>
         </div>
       `;
@@ -282,7 +749,7 @@
         } else {
           s += `
             <div class="q-box pop">
-              <small style="color:var(--gold);font-weight:800;letter-spacing:0.06em">LA TUA DOMANDA SEGRETA</small>
+              <small style="color:var(--neon-cyan);font-weight:800;letter-spacing:0.06em">LA TUA DOMANDA SEGRETA</small>
               <div class="q-text">${esc(v.question)}</div>
             </div>
             <div class="card elevated" style="gap:14px">
@@ -324,6 +791,8 @@
           }
         `;
       } else if (v.phase === 'reveal') {
+        playSound('fanfare');
+        haptic(40);
         const r = v.result;
         const mine = r.impId === me.id;
         const g = r.gain[me.id] || 0;
@@ -367,15 +836,21 @@
           const inp = $('#a');
           const t = inp ? inp.value.trim() : '';
           if (!t) return;
+          playSound('tap');
+          haptic(15);
           sb.disabled = true;
           sb.textContent = 'Invio in corso...';
           const r = await api({ type: 'answer', id: S.id, text: t });
           if (r && r.error) {
+            playSound('error');
+            haptic(30);
             sb.disabled = false;
             sb.textContent = 'Invia Risposta';
             alert(r.error);
+          } else {
+            playSound('success');
+            haptic(20);
           }
-          // In caso di successo, l'aggiornamento SSE mostrerà la schermata 'Risposta inviata'
         };
         sb.onclick = go;
         $('#a').onkeydown = e => e.key === 'Enter' && go();
@@ -383,24 +858,33 @@
 
       document.querySelectorAll('[data-v]').forEach(b => {
         b.onclick = async () => {
+          playSound('tap');
+          haptic(15);
           document.querySelectorAll('[data-v]').forEach(btn => btn.disabled = true);
           const origText = b.innerHTML;
           b.innerHTML = '<span style="font-size:16px;font-weight:700">Invio voto...</span>';
           const r = await api({ type: 'vote', id: S.id, target: b.dataset.v });
           if (r && r.error) {
+            playSound('error');
+            haptic(30);
             document.querySelectorAll('[data-v]').forEach(btn => btn.disabled = false);
             b.innerHTML = origText;
             alert(r.error);
+          } else {
+            playSound('success');
+            haptic(20);
           }
         };
       });
     }
 
-    // Startup check
+    // ─────────────────────────────────────────────────────────────
+    // AVVIO APPLICAZIONE
+    // ─────────────────────────────────────────────────────────────
     (async () => {
       if (S.room && !urlRoom) {
         ROOM = S.room;
-        const r = await api({ type: 'join', id: S.id, name: S.name });
+        const r = await api({ type: 'join', id: S.id, name: S.name, adult: true });
         if (r.ok) return play();
         S.room = '';
         save();
