@@ -121,6 +121,9 @@ const rateMap = new Map();
 
 const RATE_LIMIT   = 30;    // max requests per window
 const RATE_WINDOW  = 60e3;  // 1 minute in ms
+const MAX_BODY_BYTES = 128 * 1024;
+const MAX_ROOMS = 100;
+const MAX_PLAYERS_PER_ROOM = 24;
 
 function isRateLimited(ip) {
   const now  = Date.now();
@@ -143,10 +146,31 @@ setInterval(() => {
 }, 5 * 60e3);
 
 // ─── FIX #4: Security headers helper ──────────────────────────────────────────
-function setSecurityHeaders(res) {
+function setSecurityHeaders(req, res) {
+  const nonce = crypto.randomBytes(18).toString('base64');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options',        'DENY');
-  res.setHeader('X-XSS-Protection',       '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+  res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`);
+  if (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  }
+  return nonce;
+}
+
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true; // non-browser clients do not send Origin
+  try { return new URL(origin).host === req.headers.host; }
+  catch { return false; }
+}
+
+function rateLimited(req, res) {
+  if (!isRateLimited(req.socket.remoteAddress || 'unknown')) return false;
+  res.writeHead(429, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify({ error: 'Troppe richieste, riprova tra poco.' }));
+  return true;
 }
 
 // ─── AI helpers ───────────────────────────────────────────────────────────────
@@ -295,7 +319,12 @@ function reveal(R) {
 
 function setPhoto(p, d) {
   const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(d || '');
-  if (m && m[1].length < 90000) { p.photo = Buffer.from(m[1], 'base64'); p.pv++; }
+  if (!m || m[1].length > 43692 || m[1].length % 4 !== 0) return false;
+  const bytes = Buffer.from(m[1], 'base64');
+  if (!bytes.length || bytes.length > 32768 || bytes.toString('base64') !== m[1]) return false;
+  p.photo = bytes;
+  p.pv++;
+  return true;
 }
 
 // ─── act() — FIX #1: full input validation & sanitization ─────────────────────
@@ -322,6 +351,7 @@ async function act(b) {
   // ── join ───────────────────────────────────────────────────────────────────
   if (t === 'join') {
     if (!id || id === 'host') return { error: 'Errore, riprova.' };
+    if (b.adult !== true) return { error: 'Per giocare è necessario dichiarare di avere almeno 18 anni.' };
 
     // Validate name: allowed chars + max 14 chars
     const rawName = sanitize(String(b.name || ''), 14);
@@ -329,12 +359,13 @@ async function act(b) {
 
     let p = R.players[id];
     if (!p) {
+      if (P(R).length >= MAX_PLAYERS_PER_ROOM) return { error: 'La stanza ha raggiunto il limite di giocatori.' };
       let name = rawName || 'Giocatore';
       let n = name, i = 2;
       while (P(R).some(x => x.name.toLowerCase() === n.toLowerCase())) n = name + i++;
       p = R.players[id] = { id, name: n, score: 0, online: false, photo: null, pv: 0 };
     }
-    if (b.photo) setPhoto(p, b.photo);
+    if (b.photo && !setPhoto(p, b.photo)) return { error: 'Foto non valida. Scegline un’altra o continua senza foto.' };
     p.online = R.clients.has(id);
     broadcast(R);
     return { ok: true, name: p.name };
@@ -372,13 +403,13 @@ async function act(b) {
 }
 
 // ─── Static file map ──────────────────────────────────────────────────────────
-const PAGES = { '/': 'index.html', '/host': 'host.html', '/style.css': 'style.css', '/app.js': 'app.js', '/qr.js': 'qr.js' };
+const PAGES = { '/': 'index.html', '/host': 'host.html', '/privacy': 'privacy.html', '/style.css': 'style.css', '/app.js': 'app.js', '/qr.js': 'qr.js' };
 const TYPE  = { html: 'text/html', css: 'text/css', js: 'text/javascript' };
 
 // ─── HTTP server ──────────────────────────────────────────────────────────────
 http.createServer((req, res) => {
   // FIX #4: Apply security headers to every response
-  setSecurityHeaders(res);
+  const nonce = setSecurityHeaders(req, res);
 
   const u = new URL(req.url, 'http://x');
   const q = u.searchParams;
@@ -387,7 +418,7 @@ http.createServer((req, res) => {
   if (u.pathname === '/events') {
     const R  = rooms.get((q.get('room') || '').toUpperCase());
     const id = q.get('id') || '';
-    if (!R || (id === 'host' && q.get('token') !== R.token)) { res.writeHead(404); return res.end(); }
+    if (!R || (id === 'host' ? q.get('token') !== R.token : !ID_RE.test(id) || !R.players[id])) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     R.clients.set(id, res);
     if (R.players[id]) R.players[id].online = true;
@@ -404,29 +435,51 @@ http.createServer((req, res) => {
 
   // ── Create room ────────────────────────────────────────────────────────────
   } else if (u.pathname === '/api/create' && req.method === 'POST') {
+    if (!sameOrigin(req)) { res.writeHead(403); return res.end('Richiesta non consentita'); }
+    if (rateLimited(req, res)) return;
+    if (Number(req.headers['content-length'] || 0) > 0 || req.headers['transfer-encoding']) {
+      res.writeHead(400); return res.end('La richiesta non deve contenere un corpo.');
+    }
+    if (rooms.size >= MAX_ROOMS) { res.writeHead(503); return res.end('Troppe stanze attive, riprova più tardi.'); }
     const R = mkRoom();
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
     res.end(JSON.stringify({ room: R.code, token: R.token }));
 
   // ── Main API — with rate limiting ──────────────────────────────────────────
   } else if (u.pathname === '/api' && req.method === 'POST') {
-    // FIX #3: Rate limiting — check before reading the body
-    const ip = req.socket.remoteAddress || 'unknown';
-    if (isRateLimited(ip)) {
-      res.writeHead(429, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'Troppo veloce, riprova tra poco.' }));
+    if (!sameOrigin(req)) { res.writeHead(403); return res.end('Richiesta non consentita'); }
+    if (rateLimited(req, res)) return;
+    if (!(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
+      res.writeHead(415); return res.end('È richiesto JSON');
     }
 
-    let s = '';
-    req.on('data', c => { s += c; if (s.length > 200000) req.destroy(); });
-    req.on('end', async () => {
-      let out = {};
-      try   { out = await act(JSON.parse(s)); }
-      catch (e) {
-        error('Errore gestione richiesta /api', { error: e.message });
-        out = { error: 'Errore' };
+    let s = '', bodyBytes = 0, tooLarge = false;
+    req.on('data', c => {
+      if (tooLarge) return;
+      bodyBytes += c.length;
+      if (bodyBytes > MAX_BODY_BYTES) {
+        tooLarge = true;
+        res.writeHead(413, { 'Connection': 'close' });
+        res.end('Richiesta troppo grande');
+        return;
       }
-      res.setHeader('Content-Type', 'application/json');
+      s += c;
+    });
+    req.on('end', async () => {
+      if (tooLarge || res.writableEnded) return;
+      let out = {};
+      try {
+        const body = JSON.parse(s);
+        if (!body || Array.isArray(body) || typeof body !== 'object') throw new Error('JSON non valido');
+        out = await act(body);
+      }
+      catch (e) {
+        warn('Richiesta /api non valida');
+        out = { error: 'Richiesta non valida' };
+      }
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
       res.end(JSON.stringify(out));
     });
 
@@ -436,14 +489,16 @@ http.createServer((req, res) => {
     const R = rooms.get((c || '').toUpperCase());
     const p = R && R.players[id];
     if (!p || !p.photo) { res.writeHead(404); return res.end(); }
-    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public,max-age=86400' });
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
     res.end(p.photo);
 
   // ── Static files ───────────────────────────────────────────────────────────
   } else if (PAGES[u.pathname]) {
     const f = PAGES[u.pathname];
     res.writeHead(200, { 'Content-Type': TYPE[f.split('.')[1]] + '; charset=utf-8' });
-    res.end(fs.readFileSync(path.join(__dirname, 'public', f)));
+    let content = fs.readFileSync(path.join(__dirname, 'public', f));
+    if (f.endsWith('.html')) content = content.toString('utf8').replace(/<script>/g, `<script nonce="${nonce}">`);
+    res.end(content);
 
   } else {
     res.writeHead(404);

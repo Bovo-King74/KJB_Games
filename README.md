@@ -49,12 +49,17 @@ La schermata dell'host (`/host`) include due macro-aree operative dedicate:
 └── public/                 # File statici serviti ai client
     ├── index.html          # Interfaccia mobile per giocatori (Lobby & Catalogo giochi)
     ├── host.html           # Console Host per TV/PC (QR, Selezione giochi & Direttore IA)
+    ├── privacy.html        # Informativa privacy da completare prima del deploy
     ├── style.css           # Design system clubhouse dark-mode con token Bricolage/Figtree
     ├── app.js              # Stemma KJB, catalogo minigiochi, preset IA e utility condivise
     └── qr.js               # Generatore SVG di codici QR
 ```
 
-Per approfondire: [regole](docs/COME_SI_GIOCA.md), [guida al deploy](docs/COME_METTERLO_ONLINE.md), [prodotto](docs/PRODUCT.md), [design](docs/DESIGN.md) e [stato del progetto](docs/BORDO.md).
+Per approfondire: [regole](docs/COME_SI_GIOCA.md), [informativa privacy](public/privacy.html), [guida al deploy](docs/COME_METTERLO_ONLINE.md), [prodotto](docs/PRODUCT.md), [design](docs/DESIGN.md) e [stato del progetto](docs/BORDO.md).
+
+## Sicurezza e privacy
+
+Il server applica limiti alle richieste e alle risorse in memoria, controlla origine e formato delle richieste API, valida i link esterni e invia header di sicurezza. Foto, stanze e dati di gioco rimangono in memoria fino alla scadenza della stanza o al riavvio del server. L’informativa in `public/privacy.html` è una bozza: prima di esporre il servizio su Internet, il gestore deve completare identità, contatto, basi giuridiche e informazioni sui fornitori effettivi.
 
 ---
 

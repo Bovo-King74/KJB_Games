@@ -33,6 +33,13 @@ Nel servizio su Render vai su **Environment** e aggiungi:
 
 Poi salva: il sito si riavvia da solo. La chiave resta sul server, nessun giocatore può vederla. Se non la metti, il gioco usa le domande preimpostate.
 
+## Prima di renderlo pubblico
+
+- Completa `public/privacy.html`: identifica il titolare, aggiungi un contatto valido e descrivi la base giuridica, i fornitori effettivi e gli eventuali trasferimenti internazionali. Non pubblicare la bozza con i campi tra parentesi.
+- Usa il sito solo tramite HTTPS e verifica le condizioni di hosting e dei provider IA configurati.
+- Il gioco è presentato come 18+; non raccogliere foto o dati di persone senza averle informate. La foto è facoltativa.
+- Non inserire credenziali o chiavi API nel repository: configurale solo come variabili d’ambiente del servizio.
+
 ## Come si gioca online
 
 1. Sul computer (o sul telefono di chi ospita) apri `https://il-tuo-indirizzo/host`.
