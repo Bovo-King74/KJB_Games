@@ -70,7 +70,7 @@ Vince chi ha più punti dopo i round che decidete di fare. Consiglio: 5 round.
 
 ## Per chi ospita
 
-1. Avvia il server sul computer con `node server.js`.
+1. Dalla cartella principale del progetto, avvia il server con `npm start` (oppure `node server.js`).
 2. Apri `http://localhost:3000/host` sul computer.
 3. Quando ci sono almeno 3 giocatori, premi **Inizia**.
 4. Se vuoi, scrivi un tema prima di iniziare (cibo, scuola, viaggi…) e l'IA inventa le domande su quello.

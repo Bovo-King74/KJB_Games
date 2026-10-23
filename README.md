@@ -39,11 +39,13 @@ La schermata dell'host (`/host`) include due macro-aree operative dedicate:
 ```text
 ├── server.js               # Server Node.js nativo (HTTP, SSE, API di gioco e generazione IA)
 ├── package.json            # Configurazione e script di avvio
-├── PRODUCT.md              # Documentazione del prodotto e brand Zughi del KJB
-├── DESIGN.md               # Design tokens, tipografia e sistema visivo
 ├── README.md               # Panoramica e istruzioni del progetto
-├── COME_SI_GIOCA.md        # Regole dettagliate del gioco
-├── COME_METTERLO_ONLINE.md # Guida al deploy su Render
+├── docs/                   # Documentazione di prodotto, design e guide
+│   ├── BORDO.md            # Stato del progetto e attività
+│   ├── COME_METTERLO_ONLINE.md # Guida al deploy su Render
+│   ├── COME_SI_GIOCA.md    # Regole dettagliate del gioco
+│   ├── DESIGN.md           # Design tokens, tipografia e sistema visivo
+│   └── PRODUCT.md          # Documentazione del prodotto e del brand
 └── public/                 # File statici serviti ai client
     ├── index.html          # Interfaccia mobile per giocatori (Lobby & Catalogo giochi)
     ├── host.html           # Console Host per TV/PC (QR, Selezione giochi & Direttore IA)
@@ -51,6 +53,8 @@ La schermata dell'host (`/host`) include due macro-aree operative dedicate:
     ├── app.js              # Stemma KJB, catalogo minigiochi, preset IA e utility condivise
     └── qr.js               # Generatore SVG di codici QR
 ```
+
+Per approfondire: [regole](docs/COME_SI_GIOCA.md), [guida al deploy](docs/COME_METTERLO_ONLINE.md), [prodotto](docs/PRODUCT.md), [design](docs/DESIGN.md) e [stato del progetto](docs/BORDO.md).
 
 ---
 

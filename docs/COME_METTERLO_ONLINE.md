@@ -1,4 +1,4 @@
-# Mettere online Fuori Tema
+# Mettere online Zughi del KJB
 
 Dopo questi passaggi avrai un indirizzo tipo `https://fuori-tema.onrender.com` che funziona da qualsiasi rete, anche con i dati mobili. Non serve più stare sullo stesso Wi-Fi.
 
@@ -7,7 +7,7 @@ Dopo questi passaggi avrai un indirizzo tipo `https://fuori-tema.onrender.com` c
 1. Crea un account gratis su github.com.
 2. Premi **New repository**, chiamalo `fuori-tema` e crealo.
 3. Nella pagina del repository premi **uploading an existing file**.
-4. Trascina dentro **tutto il contenuto** della cartella `fuori-tema-web`: `server.js`, `package.json`, `.gitignore` e la cartella `public` (con dentro `index.html`, `host.html`, `style.css`, `app.js`, `qr.js`).
+4. Pubblica il contenuto del repository: `server.js`, `package.json`, `package-lock.json`, `.gitignore` e la cartella `public` (con `index.html`, `host.html`, `style.css`, `app.js`, `qr.js`). La cartella `docs/` contiene la documentazione.
 5. Premi **Commit changes**.
 
 La cartella `public` deve restare una cartella, con i suoi file dentro.
@@ -51,4 +51,4 @@ Ogni partita ha il suo codice, quindi più gruppi possono giocare insieme sullo 
 
 ## Provarlo sul tuo computer prima
 
-Nella cartella `fuori-tema-web` scrivi `node server.js` e apri `http://localhost:3000`. Per il selfie dal telefono serve però un indirizzo https, quindi la prova completa si fa online.
+Dalla cartella principale del repository esegui `npm start` e apri `http://localhost:3000`. Per usare la fotocamera dal telefono il browser richiede un contesto sicuro (HTTPS o localhost), quindi la prova completa da un altro dispositivo si fa online.
