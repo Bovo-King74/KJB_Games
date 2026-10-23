@@ -141,8 +141,13 @@ small {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   padding-bottom: 8px;
+}
+
+.brand-header > * {
+  min-width: 0;
 }
 
 .brand-badge {
@@ -151,6 +156,8 @@ small {
   gap: 14px;
   text-decoration: none;
   color: inherit;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .crest-icon {
@@ -167,6 +174,14 @@ small {
 .brand-title-wrap {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+.brand-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
 }
 
 .brand-title {
@@ -881,11 +896,13 @@ small {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
   gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 24px;
 }
 
 .macro-nav-btn {
   flex: 1;
+  min-width: 0;
   padding: 14px 20px;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -897,9 +914,13 @@ small {
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 10px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .macro-nav-btn:hover {
@@ -984,6 +1005,43 @@ small {
   justify-content: space-between;
   gap: 18px;
   box-shadow: var(--shadow-sm);
+}
+
+.randomizer-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.randomizer-launch-btn {
+  width: auto;
+  min-width: 220px;
+  padding: 14px 20px;
+}
+
+@media (max-width: 1024px) {
+  .macro-nav {
+    flex-direction: column;
+  }
+
+  .randomizer-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .randomizer-launch-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ext-link-add-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ext-link-add-btn {
+    width: 100%;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1131,6 +1189,28 @@ small {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.ext-link-add-box {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ext-link-add-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr auto;
+  gap: 10px;
+}
+
+.ext-link-add-btn {
+  width: auto;
+  padding: 10px 18px;
+  font-size: 14px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1634,3 +1714,5 @@ small {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+

@@ -85,7 +85,7 @@
               <span class="brand-subtitle">Console Host • Dashboard della Serata</span>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:16px">
+          <div class="brand-header-meta">
             <span class="status-pill">
               <span class="status-dot"></span>
               Stanza Live: <b style="color:var(--text-main);margin-left:4px">${ROOM}</b>
@@ -292,7 +292,7 @@
 
         <!-- Opzione 3: Randomizer (Scelta Casuale) -->
         <div class="randomizer-box">
-          <div style="display:flex;align-items:center;gap:16px">
+          <div class="randomizer-main">
             <span style="font-size:38px">🎲</span>
             <div>
               <h3 style="font-size:19px">3. Scelta Casuale (Randomizer)</h3>
@@ -301,7 +301,7 @@
               </p>
             </div>
           </div>
-          <button class="btn secondary" id="start-randomizer" style="width:auto;min-width:220px;padding:14px 20px" ${n < 3 ? 'disabled' : ''}>
+          <button class="btn secondary randomizer-launch-btn" id="start-randomizer" ${n < 3 ? 'disabled' : ''}>
             <span>🎲 Avvia Gioco a Sorpresa</span>
           </button>
         </div>
@@ -452,12 +452,12 @@
           </div>
 
           <!-- Modulo Aggiunta Nuovo Link -->
-          <div style="background:rgba(0,0,0,0.25);padding:16px;border-radius:var(--radius-sm);border:1px dashed var(--border);display:flex;flex-direction:column;gap:12px">
+          <div class="ext-link-add-box">
             <b style="font-size:14px;color:var(--gold)">+ AGGIUNGI UN NUOVO SITO O SFIDA WEB ALL'ARCHIVIO:</b>
-            <div style="display:grid;grid-template-columns:1fr 1.5fr auto;gap:10px">
+            <div class="ext-link-add-grid">
               <input class="txt" id="new-link-title" placeholder="Nome (es. Codenames)" style="padding:10px 14px;font-size:14px">
               <input class="txt" id="new-link-url" placeholder="Indirizzo (es. https://...)" style="padding:10px 14px;font-size:14px">
-              <button class="btn" id="btn-add-link" style="width:auto;padding:10px 18px;font-size:14px">
+              <button class="btn ext-link-add-btn" id="btn-add-link">
                 Aggiungi
               </button>
             </div>
